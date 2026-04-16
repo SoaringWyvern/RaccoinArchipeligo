@@ -1,0 +1,10 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# VS Code specific
+.vscode/
+
+# Ignore local DLLs you might copy in for reference
+*.dll
+.fake

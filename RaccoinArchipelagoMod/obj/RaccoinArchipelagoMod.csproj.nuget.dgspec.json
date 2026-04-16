@@ -1,30 +1,30 @@
 {
   "format": 1,
   "restore": {
-    "F:\\RaccoinArchipelago\\RaccoinArchipelagoMod\\RaccoinArchipelagoMod.csproj": {}
+    "F:\\RaccoinArchipelago\\raccoinarchipelagomod\\RaccoinArchipelagoMod.csproj": {}
   },
   "projects": {
-    "F:\\RaccoinArchipelago\\RaccoinArchipelagoMod\\RaccoinArchipelagoMod.csproj": {
+    "F:\\RaccoinArchipelago\\raccoinarchipelagomod\\RaccoinArchipelagoMod.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "F:\\RaccoinArchipelago\\RaccoinArchipelagoMod\\RaccoinArchipelagoMod.csproj",
-        "projectName": "RaccoinArchipelagoMod",
-        "projectPath": "F:\\RaccoinArchipelago\\RaccoinArchipelagoMod\\RaccoinArchipelagoMod.csproj",
+        "projectUniqueName": "F:\\RaccoinArchipelago\\raccoinarchipelagomod\\RaccoinArchipelagoMod.csproj",
+        "projectName": "RaccoinArchipelago",
+        "projectPath": "F:\\RaccoinArchipelago\\raccoinarchipelagomod\\RaccoinArchipelagoMod.csproj",
         "packagesPath": "C:\\Users\\javym\\.nuget\\packages\\",
-        "outputPath": "F:\\RaccoinArchipelago\\RaccoinArchipelagoMod\\obj\\",
+        "outputPath": "F:\\RaccoinArchipelago\\raccoinarchipelagomod\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\javym\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
-          "net8.0"
+          "net6.0"
         ],
         "sources": {
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
-          "net8.0": {
-            "targetAlias": "net8.0",
+          "net6.0": {
+            "targetAlias": "net6.0",
             "projectReferences": {}
           }
         },
@@ -40,8 +40,18 @@
         }
       },
       "frameworks": {
-        "net8.0": {
-          "targetAlias": "net8.0",
+        "net6.0": {
+          "targetAlias": "net6.0",
+          "dependencies": {
+            "Archipelago.MultiClient.Net": {
+              "target": "Package",
+              "version": "[5.0.6, )"
+            },
+            "WebSocketSharp-netstandard": {
+              "target": "Package",
+              "version": "[1.0.1, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",
@@ -53,12 +63,26 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[6.0.36, 6.0.36]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[6.0.36, 6.0.36]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[6.0.36, 6.0.36]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.416/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.416\\RuntimeIdentifierGraph.json"
         }
       }
     }
