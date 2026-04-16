@@ -232,30 +232,20 @@ namespace RaccoinArchipelagoMod
     [HarmonyPatch(typeof(PrizeBallView), nameof(PrizeBallView.InitColor))]
     public class PrizeBallColorPatch
     {
-        // 1. CACHE: stores the AP sprite
-        private static Sprite cachedAPSprite = null;
-
         [HarmonyPrefix]
         public static bool Prefix(PrizeBallView __instance)
         {
-            // 2. LOAD ONCE: If the sprite is empty, use the AssetLoader to grab it.
-            if (cachedAPSprite == null)
-            {
-                string path = Path.Combine(Paths.GameRootPath, "ArchipelagoAssets", "AP_Logo.png");
-                cachedAPSprite = AssetLoader.LoadSprite(path);
-            }
-
-            // 3. Is it an AP ball?
+            // Is it an AP ball?
             if (__instance.excelID == 4005)
             {
                 Color apPurple = new Color(0.65f, 0.13f, 0.96f, 1f);
                 Color transparentPurple = new Color(0.65f, 0.13f, 0.96f, 0.5f); 
 
-                // Apply the custom sprite
-                if (__instance.prizeIcon != null && cachedAPSprite != null) 
+                // apply custom icon to ap ball
+                if (__instance.prizeIcon != null && RaccoinPlugin.APLogoSprite != null) 
                 {
-                    __instance.prizeIcon.color = Color.white;
-                    __instance.prizeIcon.sprite = cachedAPSprite;
+                    __instance.prizeIcon.color = Color.white; // Prevent purple tint
+                    __instance.prizeIcon.sprite = RaccoinPlugin.APLogoSprite; 
                 }
 
                 // Paint the 3D capsule
@@ -291,7 +281,7 @@ namespace RaccoinArchipelagoMod
             }
             else
             {
-                // 4. Is it a normal ball?
+                // Is it a normal ball?
                 if (__instance.prizeIcon != null) __instance.prizeIcon.color = Color.white; 
 
                 var normalRenderers = __instance.GetComponentsInChildren<Renderer>(true);

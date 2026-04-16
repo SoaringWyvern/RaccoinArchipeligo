@@ -90,6 +90,29 @@ namespace RaccoinArchipelagoMod
                     }
                     RaccoinPlugin.ModLogger.LogMessage("[AP] Custom milestone values received from server.");
                 }
+
+                // Get the game seed
+                string currentSeed = Session.RoomState.Seed;
+                string currentSlotName = loginSuccess.SlotData.Count > 0 ? Session.Players.GetPlayerAlias(loginSuccess.Slot) : "UnknownPlayer";
+                string uniqueSessionId = $"{currentSeed}_{currentSlotName}";
+
+                // Check if the seed matches the one stored in the score file
+                if (RaccoinPlugin.LastPlayedSeed.Value != uniqueSessionId)
+                {
+                    RaccoinPlugin.ModLogger.LogMessage("=========================================");
+                    RaccoinPlugin.ModLogger.LogMessage("[AP] NEW SEED DETECTED! Wiping cumulative score to 0.");
+                    RaccoinPlugin.ModLogger.LogMessage("=========================================");
+                    
+                    // Wipe the score
+                    RaccoinPlugin.SavedCumulativeScore.Value = 0;
+                    
+                    // Save the new Seed ID so it doesn't wipe it again next round
+                    RaccoinPlugin.LastPlayedSeed.Value = uniqueSessionId;
+                    
+                    // Save the file
+                    RaccoinPlugin.Instance.Config.Save();
+                }
+                
                 // Get dynamic event parameters from AP server
                 if (loginSuccess.SlotData.TryGetValue("ap_points_value", out var pv)) AP_PointsValue = Convert.ToInt32(pv);
                 

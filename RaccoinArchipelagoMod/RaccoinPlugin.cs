@@ -19,17 +19,18 @@ namespace RaccoinArchipelagoMod
         public static Sprite APLogoSprite;
         public static RaccoinPlugin Instance; 
         public static ConfigEntry<long> SavedCumulativeScore;
+        public static ConfigEntry<string> LastPlayedSeed;
 
         public override void Load() 
         {
             Instance = this;
             ModLogger = Log;
-
-            SavedCumulativeScore = Config.Bind("Archipelago", "CumulativeScore", 0L, "The total score accumulated across all AP rounds.");
             
-            // 1. Load the AP Logo
-            string logoPath = Path.Combine(Paths.GameRootPath, "ArchipelagoAssets", "AP_Logo.png");
-            APLogoSprite = AssetLoader.LoadSprite(logoPath);
+            SavedCumulativeScore = Config.Bind("Archipelago", "CumulativeScore", 0L, "The total score accumulated across all AP rounds.");
+            LastPlayedSeed = Config.Bind("Archipelago", "LastPlayedSeed", "", "The unique seed identifier.");
+
+            // FIX: Just call LoadSprite directly. It handles finding the embedded image itself!
+            APLogoSprite = AssetLoader.LoadSprite();
 
             if (APLogoSprite != null) ModLogger.LogMessage("[AP] Successfully loaded AP_Logo.png into memory!");
             else ModLogger.LogWarning("[AP] Could not find AP_Logo.png!");
@@ -133,28 +134,39 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // ASSET LOADER
+    // Asset Loader (for custom AP Coin image and others tba)
     public static class AssetLoader
     {
         private static Sprite _cachedSprite;
 
-        public static unsafe Sprite LoadSprite(string filePath)
+        public static unsafe Sprite LoadSprite()
         {
-            // Return the cached sprite immediately if it already exists
             if (_cachedSprite != null) return _cachedSprite;
-            
-            if (!File.Exists(filePath)) 
-            {
-                RaccoinPlugin.ModLogger.LogWarning($"[AP] Could not find AP_Logo.png at: {filePath}");
-                return null;
-            }
 
             try
             {
-                byte[] imageAsBytes = File.ReadAllBytes(filePath);
-                Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                // Grab the currently running .dll assembly
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
                 
-                // Protect the raw texture memory
+                // The internal path format is always: Namespace.FileName.Extension
+                string resourceName = "RaccoinArchipelagoMod.AP_Logo.png";
+
+                byte[] imageAsBytes;
+
+                // Read the image data directly out of the DLL
+                using (Stream stream = assembly.GetManifestResourceStream(resourceName))
+                {
+                    if (stream == null)
+                    {
+                        RaccoinPlugin.ModLogger.LogError($"[AP] Could not find embedded resource: {resourceName}");
+                        return null;
+                    }
+                    
+                    imageAsBytes = new byte[stream.Length];
+                    stream.Read(imageAsBytes, 0, imageAsBytes.Length);
+                }
+
+                Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                 tex.hideFlags |= HideFlags.HideAndDontSave;
                 
                 var intPtr = UnityEngine.Object.MarshalledUnityObject.MarshalNotNull(tex);
@@ -169,16 +181,14 @@ namespace RaccoinArchipelagoMod
                 Vector2 pivot = new Vector2(0.5f, 0.5f);
                 
                 _cachedSprite = Sprite.Create(tex, rect, pivot);
-                
-                // Protect the final Sprite using bitwise OR
                 _cachedSprite.hideFlags |= HideFlags.HideAndDontSave;
                 
-                RaccoinPlugin.ModLogger.LogMessage("[AP] Image successfully loaded and cached in memory.");
+                RaccoinPlugin.ModLogger.LogMessage("[AP] Embedded Image successfully loaded and cached in memory.");
                 return _cachedSprite;
             }
             catch (Exception e)
             {
-                RaccoinPlugin.ModLogger.LogError($"[AP] Asset Loader Failed: {e.Message}");
+                RaccoinPlugin.ModLogger.LogError($"[AP] Embedded Asset Loader Failed: {e.Message}");
                 return null;
             }
         }

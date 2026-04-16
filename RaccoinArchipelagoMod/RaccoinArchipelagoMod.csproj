@@ -90,6 +90,7 @@
     <Reference Include="Unity.Mathematics">
       <HintPath>F:\SteamLibrary\steamapps\common\RACCOIN\BepInEx\interop\Unity.Mathematics.dll</HintPath>
     </Reference>
+    <EmbeddedResource Include="AP_Logo.png" />
   </ItemGroup>
 
 </Project>
