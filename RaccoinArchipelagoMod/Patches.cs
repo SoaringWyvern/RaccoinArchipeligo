@@ -1,11 +1,8 @@
 using HarmonyLib;
 using UnityEngine;
-using UnityEngine.UI;
-using Unity.Mathematics;
 using System.IO;
 using BepInEx;
 using System;
-using System.Threading.Tasks;
 
 namespace RaccoinArchipelagoMod
 {
@@ -103,29 +100,81 @@ namespace RaccoinArchipelagoMod
                 // Points
                 if (incomingItemId == 80002) 
                 {
-                    StealDataPatch.CurrentGameData.curPt += 100;
-                    RaccoinPlugin.ModLogger.LogMessage("[AP REWARD] Gave the player 100 Points!");
+                    StealDataPatch.CurrentGameData.curPt += ArchipelagoManager.AP_PointsValue;
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Gave the player {ArchipelagoManager.AP_PointsValue} Points!");
                 }
-                // Events & Traps
-                else if (incomingItemId >= 80003 && incomingItemId <= 80011)
+                // Events & Traps (Expanded to cover IDs up to 80017)
+                else if (incomingItemId >= 80003 && incomingItemId <= 80017)
                 {
                     EventQueueManager eventManager = UnityEngine.Object.FindObjectOfType<EventQueueManager>();
                     
                     if (eventManager != null)
                     {
-                        if (incomingItemId == 80003) // Coin Tower
+                        // --- COIN TOWERS ---
+                        if (incomingItemId == 80003) // Small
                         {
-                            QueueEvent slip = new QueueEvent(QueueEventDefine.CoinTower, 500, 0, 0, "", false);
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.CoinTower, ArchipelagoManager.AP_SmallTowerCoins, 0, 0, "", false);
                             eventManager.AddQueueEvent(slip);
-                            RaccoinPlugin.ModLogger.LogMessage("[AP REWARD] Triggered 500-Coin Tower!");
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered SMALL Coin Tower ({ArchipelagoManager.AP_SmallTowerCoins})!");
                         }
-                        else if (incomingItemId == 80004) // Wheel Spin
+                        else if (incomingItemId == 80012) // Medium
                         {
-                            QueueEvent slip = new QueueEvent(QueueEventDefine.LuckyWheel, 5, 0, 0, "", false);
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.CoinTower, ArchipelagoManager.AP_MediumTowerCoins, 0, 0, "", false);
                             eventManager.AddQueueEvent(slip);
-                            RaccoinPlugin.ModLogger.LogMessage("[AP REWARD] Triggered 5x Wheel Spin!");
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered MEDIUM Coin Tower ({ArchipelagoManager.AP_MediumTowerCoins})!");
                         }
-                        else if (incomingItemId == 80005) // Doom (Trap!)
+                        else if (incomingItemId == 80013) // Large
+                        {
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.CoinTower, ArchipelagoManager.AP_LargeTowerCoins, 0, 0, "", false);
+                            eventManager.AddQueueEvent(slip);
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered LARGE Coin Tower ({ArchipelagoManager.AP_LargeTowerCoins})!");
+                        }
+
+                        // --- WHEEL SPINS ---
+                        else if (incomingItemId == 80004) // Wheel 3
+                        {
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.LuckyWheel, ArchipelagoManager.AP_WheelSpinSmall, 0, 0, "", false);
+                            eventManager.AddQueueEvent(slip);
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered Wheel Spin x{ArchipelagoManager.AP_WheelSpinSmall}!");
+                        }
+                        else if (incomingItemId == 80014) // Wheel 4
+                        {
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.LuckyWheel, ArchipelagoManager.AP_WheelSpinMedium, 0, 0, "", false);
+                            eventManager.AddQueueEvent(slip);
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered Wheel Spin x{ArchipelagoManager.AP_WheelSpinMedium}!");
+                        }
+                        else if (incomingItemId == 80015) // Wheel 5
+                        {
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.LuckyWheel, ArchipelagoManager.AP_WheelSpinLarge, 0, 0, "", false);
+                            eventManager.AddQueueEvent(slip);
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered Wheel Spin x{ArchipelagoManager.AP_WheelSpinLarge}!");
+                        }
+
+                        // --- GIFT RAINS ---
+                        else if (incomingItemId == 80010) // Small Rain
+                        {
+                            int coinType = UnityEngine.Random.Range(1001, 1004); 
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.GiftRain, ArchipelagoManager.AP_GiftRainSmall, coinType, 0, "", false);
+                            eventManager.AddQueueEvent(slip);
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered SMALL Gift Rain ({ArchipelagoManager.AP_GiftRainSmall} coins)!");
+                        }
+                        else if (incomingItemId == 80016) // Medium Rain
+                        {
+                            int coinType = UnityEngine.Random.Range(1001, 1004); 
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.GiftRain, ArchipelagoManager.AP_GiftRainMedium, coinType, 0, "", false);
+                            eventManager.AddQueueEvent(slip);
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered MEDIUM Gift Rain ({ArchipelagoManager.AP_GiftRainMedium} coins)!");
+                        }
+                        else if (incomingItemId == 80017) // Large Rain
+                        {
+                            int coinType = UnityEngine.Random.Range(1001, 1004); 
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.GiftRain, ArchipelagoManager.AP_GiftRainLarge, coinType, 0, "", false);
+                            eventManager.AddQueueEvent(slip);
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered LARGE Gift Rain ({ArchipelagoManager.AP_GiftRainLarge} coins)!");
+                        }
+
+                        // --- EVERYTHING ELSE ---
+                        else if (incomingItemId == 80005) // Doom
                         {
                             int randomDoomId = UnityEngine.Random.Range(1001, 1018); 
                             QueueEvent slip = new QueueEvent(QueueEventDefine.Doom, randomDoomId, 0, 0, "", false);
@@ -134,39 +183,32 @@ namespace RaccoinArchipelagoMod
                         }
                         else if (incomingItemId == 80006) // Earthquake
                         {
-                            QueueEvent slip = new QueueEvent(QueueEventDefine.Shake, 7, 0, 0, "", false);
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.Shake, ArchipelagoManager.AP_EarthquakeShakes, 0, 0, "", false);
                             eventManager.AddQueueEvent(slip);
-                            RaccoinPlugin.ModLogger.LogMessage("[AP EVENT] Triggered an Earthquake!");
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP EVENT] Triggered an Earthquake ({ArchipelagoManager.AP_EarthquakeShakes} shakes)!");
                         }
-                        else if (incomingItemId == 80007) // Coin Restock
+                        else if (incomingItemId == 80007) // Restock
                         {
-                            QueueEvent slip = new QueueEvent(QueueEventDefine.FillCoin, 40, 3, 0, "0_0", false);
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.FillCoin, ArchipelagoManager.AP_RestockCoins, 3, 0, "0_0", false);
                             eventManager.AddQueueEvent(slip);
-                            RaccoinPlugin.ModLogger.LogMessage("[AP REWARD] Triggered a Coin Restock!");
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered a Coin Restock ({ArchipelagoManager.AP_RestockCoins} coins)!");
                         }
                         else if (incomingItemId == 80008) // Russian Roulette
                         {
-                            int rouletteType = UnityEngine.Random.Range(0, 2); // Picks 0 or 1
+                            int rouletteType = UnityEngine.Random.Range(0, 2); 
                             QueueEvent slip = new QueueEvent(QueueEventDefine.RussianRoulette, rouletteType, 0, 0, "", false);
                             eventManager.AddQueueEvent(slip);
                             RaccoinPlugin.ModLogger.LogMessage($"[AP EVENT] Triggered Russian Roulette (Type {rouletteType})!");
                         }
                         else if (incomingItemId == 80009) // Tube Launchers
                         {
-                            QueueEvent slip = new QueueEvent(QueueEventDefine.GiftCoin, 20, 0, 0, "", false); // Firing 20 coins
+                            QueueEvent slip = new QueueEvent(QueueEventDefine.GiftCoin, ArchipelagoManager.AP_TubeLauncherCoins, 0, 0, "", false); 
                             eventManager.AddQueueEvent(slip);
-                            RaccoinPlugin.ModLogger.LogMessage("[AP REWARD] Triggered Tube Launchers!");
-                        }
-                        else if (incomingItemId == 80010) // Gift Rain
-                        {
-                            int coinType = UnityEngine.Random.Range(1001, 1004); // Picks 1001, 1002, or 1003
-                            QueueEvent slip = new QueueEvent(QueueEventDefine.GiftRain, 30, coinType, 0, "", false); // Raining 30 coins
-                            eventManager.AddQueueEvent(slip);
-                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered Gift Rain with coin ID {coinType}!");
+                            RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered Tube Launchers ({ArchipelagoManager.AP_TubeLauncherCoins} coins)!");
                         }
                         else if (incomingItemId == 80011) // UFO
                         {
-                            int ufoType = UnityEngine.Random.Range(0, 2); // Picks 0 or 1
+                            int ufoType = UnityEngine.Random.Range(0, 2); 
                             QueueEvent slip = new QueueEvent(QueueEventDefine.UFO, 0, ufoType, 0, "", false);
                             eventManager.AddQueueEvent(slip);
                             RaccoinPlugin.ModLogger.LogMessage($"[AP EVENT] Triggered UFO (Type {ufoType})!");
@@ -289,7 +331,7 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // EVENT WIRETAP
+    // TEMPORARY DEV TOOOL: EVENT WIRETAP
     // Posts events to the console and displays the values that were passed to them.
     [HarmonyPatch(typeof(EventQueueManager), nameof(EventQueueManager.AddQueueEvent))]
     public class ExpandedEventWiretapPatch

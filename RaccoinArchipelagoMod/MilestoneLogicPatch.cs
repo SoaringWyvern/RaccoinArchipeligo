@@ -1,6 +1,6 @@
 using HarmonyLib;
 using System; 
-using System.Globalization; // Required for reading scientific notation
+using System.Globalization;
 
 namespace RaccoinArchipelagoMod
 {
@@ -20,16 +20,16 @@ namespace RaccoinArchipelagoMod
                 {
                     long roundScore = (long)currentScoreDouble;
 
-                    // 1. Add this round's score to the grand total
+                    // Add this round's score to the grand total
                     RaccoinPlugin.SavedCumulativeScore.Value += roundScore;
                     
-                    // 2. save the score total to the hard drive
+                    // save the score total to the hard drive
                     RaccoinPlugin.Instance.Config.Save();
 
                     long grandTotal = RaccoinPlugin.SavedCumulativeScore.Value;
                     RaccoinPlugin.ModLogger.LogMessage($"[AP] Round Ended! Added {roundScore}. New Grand Total: {grandTotal}");
 
-                    // 3. Check Archipelago against the TOTAL score in the file, not the round score
+                    // Check Archipelago against the TOTAL score in the file, not the round score
                     ArchipelagoManager.CheckScoreMilestones(grandTotal);
                 }
             }

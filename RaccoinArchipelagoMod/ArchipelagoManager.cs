@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
 using Archipelago.MultiClient.Net;
 using Archipelago.MultiClient.Net.Enums;
 using Archipelago.MultiClient.Net.Models;
 using Archipelago.MultiClient.Net.Helpers;
-using UnityEngine; 
 
 namespace RaccoinArchipelagoMod
 {
@@ -18,6 +16,25 @@ namespace RaccoinArchipelagoMod
         public static int LocationsChecked = 0;
         public static int ProcessedItemIndex = 0; 
 
+        public static int AP_PointsValue = 100;
+    
+        public static int AP_SmallTowerCoins = 100;
+        public static int AP_MediumTowerCoins = 250;
+        public static int AP_LargeTowerCoins = 500;
+        
+        public static int AP_WheelSpinSmall = 3;
+        public static int AP_WheelSpinMedium = 4;
+        public static int AP_WheelSpinLarge = 5;
+
+        public static int AP_GiftRainSmall = 30;
+        public static int AP_GiftRainMedium = 40;
+        public static int AP_GiftRainLarge = 50;
+
+        public static int AP_EarthquakeShakes = 7;
+        public static int AP_RestockCoins = 40;
+        public static int AP_TubeLauncherCoins = 20;
+
+        // Initialize the Milestones array to set aside the slots in memory and avoid checks being send to the sever prematurely
         public static long[] ScoreMilestones = new long[] {
             100000, 250000, 500000, 750000, 1000000, 1500000, 2000000, 2500000, 3000000, 4000000,
             5000000, 6000000, 7500000, 10000000, 15000000, 20000000, 25000000, 30000000, 40000000,
@@ -59,7 +76,7 @@ namespace RaccoinArchipelagoMod
                     return false; 
                 }
 
-                // --- NEW: PULL SLOT DATA ---
+                // Get milestone slot data from AP server
                 var loginSuccess = (LoginSuccessful)result;
                 if (loginSuccess.SlotData.ContainsKey("milestone_1"))
                 {
@@ -73,13 +90,31 @@ namespace RaccoinArchipelagoMod
                     }
                     RaccoinPlugin.ModLogger.LogMessage("[AP] Custom milestone values received from server.");
                 }
+                // Get dynamic event parameters from AP server
+                if (loginSuccess.SlotData.TryGetValue("ap_points_value", out var pv)) AP_PointsValue = Convert.ToInt32(pv);
+                
+                if (loginSuccess.SlotData.TryGetValue("ap_small_tower_coins", out var stv)) AP_SmallTowerCoins = Convert.ToInt32(stv);
+                if (loginSuccess.SlotData.TryGetValue("ap_medium_tower_coins", out var mtv)) AP_MediumTowerCoins = Convert.ToInt32(mtv);
+                if (loginSuccess.SlotData.TryGetValue("ap_large_tower_coins", out var ltv)) AP_LargeTowerCoins = Convert.ToInt32(ltv);
+                
+                if (loginSuccess.SlotData.TryGetValue("ap_wheel_spin_small", out var wsv)) AP_WheelSpinSmall = Convert.ToInt32(wsv);
+                if (loginSuccess.SlotData.TryGetValue("ap_wheel_spin_medium", out var wmv)) AP_WheelSpinMedium = Convert.ToInt32(wmv);
+                if (loginSuccess.SlotData.TryGetValue("ap_wheel_spin_large", out var wlv)) AP_WheelSpinLarge = Convert.ToInt32(wlv);
+
+                if (loginSuccess.SlotData.TryGetValue("ap_gift_rain_coins_small", out var rsv)) AP_GiftRainSmall = Convert.ToInt32(rsv);
+                if (loginSuccess.SlotData.TryGetValue("ap_gift_rain_coins_medium", out var rmv)) AP_GiftRainMedium = Convert.ToInt32(rmv);
+                if (loginSuccess.SlotData.TryGetValue("ap_gift_rain_coins_large", out var rlv)) AP_GiftRainLarge = Convert.ToInt32(rlv);
+
+                if (loginSuccess.SlotData.TryGetValue("ap_quake_shakes", out var qv)) AP_EarthquakeShakes = Convert.ToInt32(qv);
+                if (loginSuccess.SlotData.TryGetValue("ap_restock_coins", out var rcv)) AP_RestockCoins = Convert.ToInt32(rcv);
+                if (loginSuccess.SlotData.TryGetValue("ap_tube_coins", out var tcv)) AP_TubeLauncherCoins = Convert.ToInt32(tcv);
 
                 // Sync and Setup
                 SyncOnConnect();
                 Session.Items.ItemReceived += OnItemReceived;
                 ScoutMilestoneLocations();
                 
-                // --- NEW: INJECT DATA INTO GAME ---
+                // Apply Milestone Patch
                 RaccoinPlugin.Instance.PatchMilestoneRequirements();
                 
                 return true; 
