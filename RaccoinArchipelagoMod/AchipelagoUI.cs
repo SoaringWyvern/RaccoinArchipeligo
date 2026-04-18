@@ -121,7 +121,7 @@ namespace RaccoinArchipelagoMod
                             statusMessage = $"Connection Failed: {errorMsg}";
                             statusColor = Color.red;
                             statusTimer = 8f; // Show errors a little longer
-                            // Notice we do NOT hide the menu here, so they can fix their typo
+                            // do NOT hide the menu here, so they can fix their typo
                         }
                     }
                     else

@@ -4,34 +4,38 @@ using System.Globalization;
 
 namespace RaccoinArchipelagoMod
 {
-    [HarmonyPatch(typeof(GameplayData), "EndRound")] 
+    [HarmonyPatch(typeof(GameplayData), "EndRound")]
     public class RoundEndMilestonePatch
     {
         [HarmonyPostfix]
-        static void Postfix(GameplayData __instance) 
+        public static void Postfix(GameplayData __instance) 
         {
             if (!ArchipelagoManager.IsConnected) return;
 
             try
             {
-                string scoreText = __instance.curPt.ToString().Replace(",", "").Trim();
+                // Grab the raw RabbitLong object directly from the game
+                RabbitLong currentPoints = __instance.curPt;
                 
-                if (double.TryParse(scoreText, NumberStyles.Any, CultureInfo.InvariantCulture, out double currentScoreDouble))
-                {
-                    long roundScore = (long)currentScoreDouble;
+                // Convert it to a real C# number using math
+                // Formula: mantissa * 10^exponent
+                double trueScoreDouble = currentPoints.mantissa * Math.Pow(10, currentPoints.exponent);
+                
+                // Safely cast to a 64-bit integer. 
+                // (A 'long' maxes out at 9.2 Quintillion)
+                long roundScore = (long)trueScoreDouble;
 
-                    // Add this round's score to the grand total
-                    RaccoinPlugin.SavedCumulativeScore.Value += roundScore;
-                    
-                    // save the score total to the hard drive
-                    RaccoinPlugin.Instance.Config.Save();
+                // dd this round's true score to the grand total
+                RaccoinPlugin.SavedCumulativeScore.Value += roundScore;
+                
+                // Save the score total to the hard drive
+                RaccoinPlugin.Instance.Config.Save();
 
-                    long grandTotal = RaccoinPlugin.SavedCumulativeScore.Value;
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Round Ended! Added {roundScore}. New Grand Total: {grandTotal}");
+                long grandTotal = RaccoinPlugin.SavedCumulativeScore.Value;
+                RaccoinPlugin.ModLogger.LogMessage($"[AP] Round Ended! Added {roundScore}. New Grand Total: {grandTotal}");
 
-                    // Check Archipelago against the TOTAL score in the file, not the round score
-                    ArchipelagoManager.CheckScoreMilestones(grandTotal);
-                }
+                // Check Archipelago against the TOTAL score in the file
+                ArchipelagoManager.CheckScoreMilestones(grandTotal);
             }
             catch (Exception e)
             {

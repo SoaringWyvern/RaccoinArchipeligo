@@ -6,7 +6,7 @@ using System;
 
 namespace RaccoinArchipelagoMod
 {
-    // 1. PRIZEBALL REPLACER
+    // AP Ball Spawner
     [HarmonyPatch(typeof(GameplayData), nameof(GameplayData.AddPrizeBall))]
     public class SpawnPrizeBallPatch
     {
@@ -24,54 +24,111 @@ namespace RaccoinArchipelagoMod
                 int oldID = excelID;
                 
                 // Hijack the request and tell the chute to drop ID 4005 instead
-                excelID = 4005; 
+                excelID = 80000; 
                 RaccoinPlugin.ModLogger.LogInfo($"[AP] Intercepted chute! Changed normal ball {oldID} to AP Check (ID 4005)!");
             }
         }
     }
 
-    // 2. PRIZEBALL ITEM SYSTEM
+    // Put Items in AP Balls
     [HarmonyPatch(typeof(GameplayData), nameof(GameplayData.AddPrize))]
     public class CatchPrizePatch
     {
         [HarmonyPrefix]
         public static bool Prefix(int excelID)
         {
-            if (excelID == 4005)
+            if (excelID == 80000)
             {
-                RaccoinPlugin.ModLogger.LogMessage("=========================================");
-                RaccoinPlugin.ModLogger.LogMessage($"[AP] CAUGHT AP BALL FALLING OFF THE EDGE!");
-                RaccoinPlugin.ModLogger.LogMessage("=========================================");
-                
-                ArchipelagoManager.SendNextCheck();
-                return false; 
+                int activeChar = ArchipelagoManager.ActiveCharacterID;
+
+                // Ignore the tutorial character (1000) just in case an AP ball spawns there
+                if (activeChar == 1000) return false; 
+
+                int currentCount = ArchipelagoManager.CharacterDropCounts[activeChar];
+
+                // Check if they have reached the limit of 17 checks for this character
+                if (currentCount < 17) 
+                {
+                    currentCount++; // Increment the count (1 to 17)
+                    ArchipelagoManager.CharacterDropCounts[activeChar] = currentCount; 
+
+                    // The Math: 
+                    // Manager (1001) -> (1001-1001)*100 = 0 -> Base ID 81000
+                    // Biologist (1002) -> (1002-1001)*100 = 100 -> Base ID 81100
+                    long baseLocationId = 81000 + ((activeChar - 1001) * 100);
+                    
+                    // Add the count to the base ID (e.g. 81100 + 3 = 81103)
+                    long locationToSend = baseLocationId + currentCount;
+
+                    ArchipelagoManager.Session.Locations.CompleteLocationChecks(locationToSend);
+                    
+                    RaccoinPlugin.ModLogger.LogMessage($"=========================================");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Sent Check {locationToSend} (Character {activeChar} - Check {currentCount}/17)!");
+                    RaccoinPlugin.ModLogger.LogMessage($"=========================================");
+                }
+                else
+                {
+                    // They caught an AP ball, but they already found all 17 for this character
+                    APNotificationManager.SendNotification("You have already found all 17 items for this character!");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Character {activeChar} is maxed out at 17 checks!");
+                }
+
+                return false; // Prevent the vanilla game from trying to process ID 80000
             }
-            return true; 
+            return true; // Let normal prizes through
         }
     }
 
-    // 2.5 INVENTORY CAP CIRCUMVENTION
-    // Prevents AP Prizeballs from being deleted if the players prize inventory is full when the ball falls.
+    // INVENTORY CAP CIRCUMVENTION
+    // Prevents AP Prizeballs from being deleted if the player's prize inventory is full when the ball falls.
     [HarmonyPatch(typeof(DataHelper_PrizeBall), nameof(DataHelper_PrizeBall.RemovePrizeBall))]
     public class CatchFullInventoryPatch
     {
         [HarmonyPrefix]
         public static bool Prefix(PrizeBallData prizeBallData) 
         {
-            if (prizeBallData.excelID == 4005)
+            if (prizeBallData.excelID == 80000)
             {
-                RaccoinPlugin.ModLogger.LogMessage("=========================================");
-                RaccoinPlugin.ModLogger.LogMessage($"[AP] CAUGHT AP BALL (INVENTORY FULL DELETION)!");
-                RaccoinPlugin.ModLogger.LogMessage("=========================================");
-                
-                ArchipelagoManager.SendNextCheck();
+                int activeChar = ArchipelagoManager.ActiveCharacterID;
+
+                // Ignore the tutorial character (1000)
+                if (activeChar == 1000) return false; 
+
+                int currentCount = ArchipelagoManager.CharacterDropCounts[activeChar];
+
+                // Check if they have reached the limit of 17 checks for this character
+                if (currentCount < 17) 
+                {
+                    currentCount++; 
+                    ArchipelagoManager.CharacterDropCounts[activeChar] = currentCount; 
+
+                    // Calculate the specific location ID based on the character and count
+                    long baseLocationId = 81000 + ((activeChar - 1001) * 100);
+                    long locationToSend = baseLocationId + currentCount;
+
+                    ArchipelagoManager.Session.Locations.CompleteLocationChecks(locationToSend);
+                    
+                    RaccoinPlugin.ModLogger.LogMessage($"=========================================");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] CAUGHT AP BALL (INVENTORY FULL OVERRIDE)!");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Sent Check {locationToSend} (Character {activeChar} - Check {currentCount}/17)!");
+                    RaccoinPlugin.ModLogger.LogMessage($"=========================================");
+                }
+                else
+                {
+                    APNotificationManager.SendNotification("You have already found all 17 items for this character!");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Character {activeChar} is maxed out at 17 checks! (Caught while inventory full)");
+                }
+
+                // Return false to prevent the game from deleting our AP ball
                 return false; 
             }
+            
+            // If it's a normal item (like a standard Coin Cage), let the game delete/auto-sell it natively
             return true; 
         }
     }
 
-    // 3. DATA THIEF
+    // DATA THIEF
     [HarmonyPatch(typeof(GameplayData), nameof(GameplayData.NewRound))]
     public class StealDataPatch
     {
@@ -84,7 +141,7 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // 4. POSTMASTER
+    // POSTMASTER
     [HarmonyPatch(typeof(CoinMachineController), nameof(CoinMachineController.Update))]
     public class ProcessAPQueuePatch
     {
@@ -97,40 +154,37 @@ namespace RaccoinArchipelagoMod
             {
                 long incomingItemId = ArchipelagoManager.ItemQueue.Dequeue();
 
-                // Points
+                // POINTS
                 if (incomingItemId == 80002) 
                 {
                     StealDataPatch.CurrentGameData.curPt += ArchipelagoManager.AP_PointsValue;
                     RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Gave the player {ArchipelagoManager.AP_PointsValue} Points!");
                 }
-                // Events & Traps (Expanded to cover IDs up to 80017)
+                // EVENTS & TRAPS
                 else if (incomingItemId >= 80003 && incomingItemId <= 80017)
                 {
                     EventQueueManager eventManager = UnityEngine.Object.FindObjectOfType<EventQueueManager>();
                     
                     if (eventManager != null)
                     {
-                        // --- COIN TOWERS ---
-                        if (incomingItemId == 80003) // Small
+                        if (incomingItemId == 80003) // Small Tower
                         {
                             QueueEvent slip = new QueueEvent(QueueEventDefine.CoinTower, ArchipelagoManager.AP_SmallTowerCoins, 0, 0, "", false);
                             eventManager.AddQueueEvent(slip);
                             RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered SMALL Coin Tower ({ArchipelagoManager.AP_SmallTowerCoins})!");
                         }
-                        else if (incomingItemId == 80012) // Medium
+                        else if (incomingItemId == 80012) // Medium Tower
                         {
                             QueueEvent slip = new QueueEvent(QueueEventDefine.CoinTower, ArchipelagoManager.AP_MediumTowerCoins, 0, 0, "", false);
                             eventManager.AddQueueEvent(slip);
                             RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered MEDIUM Coin Tower ({ArchipelagoManager.AP_MediumTowerCoins})!");
                         }
-                        else if (incomingItemId == 80013) // Large
+                        else if (incomingItemId == 80013) // Large Tower
                         {
                             QueueEvent slip = new QueueEvent(QueueEventDefine.CoinTower, ArchipelagoManager.AP_LargeTowerCoins, 0, 0, "", false);
                             eventManager.AddQueueEvent(slip);
                             RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered LARGE Coin Tower ({ArchipelagoManager.AP_LargeTowerCoins})!");
                         }
-
-                        // --- WHEEL SPINS ---
                         else if (incomingItemId == 80004) // Wheel 3
                         {
                             QueueEvent slip = new QueueEvent(QueueEventDefine.LuckyWheel, ArchipelagoManager.AP_WheelSpinSmall, 0, 0, "", false);
@@ -149,8 +203,6 @@ namespace RaccoinArchipelagoMod
                             eventManager.AddQueueEvent(slip);
                             RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered Wheel Spin x{ArchipelagoManager.AP_WheelSpinLarge}!");
                         }
-
-                        // --- GIFT RAINS ---
                         else if (incomingItemId == 80010) // Small Rain
                         {
                             int coinType = UnityEngine.Random.Range(1001, 1004); 
@@ -172,8 +224,6 @@ namespace RaccoinArchipelagoMod
                             eventManager.AddQueueEvent(slip);
                             RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Triggered LARGE Gift Rain ({ArchipelagoManager.AP_GiftRainLarge} coins)!");
                         }
-
-                        // --- EVERYTHING ELSE ---
                         else if (incomingItemId == 80005) // Doom
                         {
                             int randomDoomId = UnityEngine.Random.Range(1001, 1018); 
@@ -219,6 +269,7 @@ namespace RaccoinArchipelagoMod
                         RaccoinPlugin.ModLogger.LogWarning("[AP ERROR] Couldn't find the EventQueueManager on the board!");
                     }
                 }
+                // UNKNOWN ITEM FALLBACK
                 else
                 {
                     StealDataPatch.CurrentGameData.AddPrizeBall(1001); 
@@ -228,7 +279,7 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // 5. PRIZEBALL PAINTJOB & CUSTOM ICON
+    // PRIZEBALL PAINTJOB & CUSTOM ICON
     [HarmonyPatch(typeof(PrizeBallView), nameof(PrizeBallView.InitColor))]
     public class PrizeBallColorPatch
     {
@@ -236,7 +287,7 @@ namespace RaccoinArchipelagoMod
         public static bool Prefix(PrizeBallView __instance)
         {
             // Is it an AP ball?
-            if (__instance.excelID == 4005)
+            if (__instance.excelID == 80000)
             {
                 Color apPurple = new Color(0.65f, 0.13f, 0.96f, 1f);
                 Color transparentPurple = new Color(0.65f, 0.13f, 0.96f, 0.5f); 
@@ -298,8 +349,8 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // 6. ACHIEVEMENT SILENCER
-    // Blocks the game from unlocking Steam achievements while the randomizer is active
+    // ACHIEVEMENT SILENCER
+    // Blocks the game from unlocking Steam achievements while the randomizer is active (needs work)
     [HarmonyPatch(typeof(SteamInterface), nameof(SteamInterface.SetAchievement))]
     public class BlockSteamAchievementsPatch
     {
@@ -321,80 +372,80 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // TEMPORARY DEV TOOOL: EVENT WIRETAP
-    // Posts events to the console and displays the values that were passed to them.
-    [HarmonyPatch(typeof(EventQueueManager), nameof(EventQueueManager.AddQueueEvent))]
-    public class ExpandedEventWiretapPatch
-    {
-        [HarmonyPrefix]
-        public static void Prefix(QueueEvent queueEvent)
-        {
-            // Filter out the system events to keep the console clean
-            if (queueEvent.eventType != QueueEventDefine.Save && 
-                queueEvent.eventType != QueueEventDefine.WaitRoundEnd &&
-                queueEvent.eventType != QueueEventDefine.RoundEnd &&
-                queueEvent.eventType != QueueEventDefine.None &&
-                queueEvent.eventType != QueueEventDefine.EnumEnd)
-            {
-                RaccoinPlugin.ModLogger.LogWarning($"=====================================");
-                RaccoinPlugin.ModLogger.LogWarning($"[SPY] CAUGHT EVENT: {queueEvent.eventType}");
-                RaccoinPlugin.ModLogger.LogWarning($"[SPY] infoID_0: {queueEvent.infoID_0}");
-                RaccoinPlugin.ModLogger.LogWarning($"[SPY] infoID_1: {queueEvent.infoID_1}");
-                RaccoinPlugin.ModLogger.LogWarning($"[SPY] infoID_2: {queueEvent.infoID_2}");
-                RaccoinPlugin.ModLogger.LogWarning($"[SPY] info string: {queueEvent.info}");
-                RaccoinPlugin.ModLogger.LogWarning($"[SPY] checkBool: {queueEvent.checkBool}");
-                RaccoinPlugin.ModLogger.LogWarning($"=====================================");
-            }
-        }
-    }
+    // // TEMPORARY DEV TOOOL: EVENT WIRETAP
+    // // Posts events to the console and displays the values that were passed to them.
+    // [HarmonyPatch(typeof(EventQueueManager), nameof(EventQueueManager.AddQueueEvent))]
+    // public class ExpandedEventWiretapPatch
+    // {
+    //     [HarmonyPrefix]
+    //     public static void Prefix(QueueEvent queueEvent)
+    //     {
+    //         // Filter out the system events to keep the console clean
+    //         if (queueEvent.eventType != QueueEventDefine.Save && 
+    //             queueEvent.eventType != QueueEventDefine.WaitRoundEnd &&
+    //             queueEvent.eventType != QueueEventDefine.RoundEnd &&
+    //             queueEvent.eventType != QueueEventDefine.None &&
+    //             queueEvent.eventType != QueueEventDefine.EnumEnd)
+    //         {
+    //             RaccoinPlugin.ModLogger.LogWarning($"=====================================");
+    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] CAUGHT EVENT: {queueEvent.eventType}");
+    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] infoID_0: {queueEvent.infoID_0}");
+    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] infoID_1: {queueEvent.infoID_1}");
+    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] infoID_2: {queueEvent.infoID_2}");
+    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] info string: {queueEvent.info}");
+    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] checkBool: {queueEvent.checkBool}");
+    //             RaccoinPlugin.ModLogger.LogWarning($"=====================================");
+    //         }
+    //     }
+    // }
 
-   // TEMPORARY DEV TOOL: EVENT TESTER
-    // F8: Fire Event & Increment ID | F9: Force Clear Stuck Event
-    [HarmonyPatch(typeof(CoinMachineController), nameof(CoinMachineController.Update))]
-    public class EventMapperDevToolPatch
-    {
-        // Change these two variables to test different events and starting IDs.
-        public static QueueEventDefine CurrentTestEvent = QueueEventDefine.CoinTower;
-        public static int CurrentTestID = 100; 
+    // // TEMPORARY DEV TOOL: EVENT TESTER
+    // // F8: Fire Event & Increment ID | F9: Force Clear Stuck Event
+    // [HarmonyPatch(typeof(CoinMachineController), nameof(CoinMachineController.Update))]
+    // public class EventMapperDevToolPatch
+    // {
+    //     // Change these two variables to test different events and starting IDs.
+    //     public static QueueEventDefine CurrentTestEvent = QueueEventDefine.CoinTower;
+    //     public static int CurrentTestID = 100; 
 
-        [HarmonyPostfix]
-        public static void Postfix()
-        {
-            // F8: FIRE THE EVENT
-            if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F8))
-            {
-                EventQueueManager eventManager = UnityEngine.Object.FindObjectOfType<EventQueueManager>();
-                if (eventManager != null)
-                {
-                    QueueEvent slip = new QueueEvent(CurrentTestEvent, CurrentTestID, 1, 1, "", false);
-                    eventManager.AddQueueEvent(slip);
+    //     [HarmonyPostfix]
+    //     public static void Postfix()
+    //     {
+    //         // F8: FIRE THE EVENT
+    //         if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F8))
+    //         {
+    //             EventQueueManager eventManager = UnityEngine.Object.FindObjectOfType<EventQueueManager>();
+    //             if (eventManager != null)
+    //             {
+    //                 QueueEvent slip = new QueueEvent(CurrentTestEvent, CurrentTestID, 1, 1, "", false);
+    //                 eventManager.AddQueueEvent(slip);
                     
-                    RaccoinPlugin.ModLogger.LogMessage("=========================================");
-                    RaccoinPlugin.ModLogger.LogMessage($"[DEV TOOL] Fired {CurrentTestEvent} with ID: {CurrentTestID}");
-                    RaccoinPlugin.ModLogger.LogMessage("=========================================");
+    //                 RaccoinPlugin.ModLogger.LogMessage("=========================================");
+    //                 RaccoinPlugin.ModLogger.LogMessage($"[DEV TOOL] Fired {CurrentTestEvent} with ID: {CurrentTestID}");
+    //                 RaccoinPlugin.ModLogger.LogMessage("=========================================");
                     
-                    CurrentTestID++;
-                }
-            }
+    //                 CurrentTestID++;
+    //             }
+    //         }
 
-            // F9: CLEAR EVENT QUEUE
-            if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F9))
-            {
-                EventQueueManager eventManager = UnityEngine.Object.FindObjectOfType<EventQueueManager>();
-                if (eventManager != null)
-                {
-                    RaccoinPlugin.ModLogger.LogWarning($"[DEV TOOL] Attempting to force-clear stuck {CurrentTestEvent}...");
+    //         // F9: CLEAR EVENT QUEUE
+    //         if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F9))
+    //         {
+    //             EventQueueManager eventManager = UnityEngine.Object.FindObjectOfType<EventQueueManager>();
+    //             if (eventManager != null)
+    //             {
+    //                 RaccoinPlugin.ModLogger.LogWarning($"[DEV TOOL] Attempting to force-clear stuck {CurrentTestEvent}...");
                     
-                    // Force the game to think the current event finished naturally
-                    eventManager.EndQueueEvent_Deal(CurrentTestEvent);
+    //                 // Force the game to think the current event finished naturally
+    //                 eventManager.EndQueueEvent_Deal(CurrentTestEvent);
                 
-                    eventManager.ClearInQueueEvent(CurrentTestEvent);
+    //                 eventManager.ClearInQueueEvent(CurrentTestEvent);
                     
-                    RaccoinPlugin.ModLogger.LogWarning($"[DEV TOOL] Queue cleared! Safe to press F8 again.");
-                }
-            }
-        }
-    }
+    //                 RaccoinPlugin.ModLogger.LogWarning($"[DEV TOOL] Queue cleared! Safe to press F8 again.");
+    //             }
+    //         }
+    //     }
+    // }
 
     // MILESTONE TRACKER VISUAL HIJACK
     [HarmonyPatch(typeof(MilestoneStageView), "SetRewardView")]
@@ -462,7 +513,7 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // 7. THE PROGRESS BAR HIJACK
+    // MILESTONE PROGRESS
     [HarmonyPatch(typeof(MilestoneExcelData), "RefreshMilestone")]
     public class OverrideMilestoneProgressPatch
     {
@@ -473,7 +524,7 @@ namespace RaccoinArchipelagoMod
 
             try
             {
-                // 1. Get the LIVE score from the current active round
+                // Get the LIVE score from the current active round
                 RabbitLong curPt = StealDataPatch.CurrentGameData.curPt;
                 long roundScore = 0;
 
@@ -487,10 +538,10 @@ namespace RaccoinArchipelagoMod
                     roundScore = (long)Math.Round(curPt.mantissa * Math.Pow(10, curPt.exponent));
                 }
 
-                // 2. Add it to the saved total from all past rounds
+                // Add it to the saved total from all past rounds
                 long grandTotal = roundScore + RaccoinPlugin.SavedCumulativeScore.Value;
 
-                // 3. Convert the Grand Total back to Mantissa/Exponent for the UI
+                // Convert the Grand Total back to Mantissa/Exponent for the UI
                 float newMantissa = grandTotal;
                 int newExponent = 0;
 
@@ -500,9 +551,7 @@ namespace RaccoinArchipelagoMod
                     newExponent++;
                 }
 
-                // 4. Overwrite the incoming score variable so the UI uses our Grand Total.
-                // (Because 'score' was passed by value into the original method, changing its fields here 
-                // only affects the UI calculation, it safely ignores the player's actual save file.)
+                // Overwrite the incoming score variable so the UI uses our Grand Total.
                 score.mantissa = newMantissa;
                 score.exponent = newExponent;
             }
@@ -510,6 +559,196 @@ namespace RaccoinArchipelagoMod
             {
                 RaccoinPlugin.ModLogger.LogWarning($"[AP] Progress Bar Hijack failed: {e.Message}");
             }
+        }
+    }
+
+    // CHARACTER SELECT
+
+    // Root Save File Bypass
+    [HarmonyPatch(typeof(CharacterExcelItem), nameof(CharacterExcelItem.isRealUnlock), MethodType.Getter)]
+    public class CharacterIsRealUnlockPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(CharacterExcelItem __instance, ref bool __result)
+        {
+            if (!ArchipelagoManager.IsConnected) return true;
+
+            try
+            {
+                if (__instance.id == 1000) 
+                {
+                    __result = true; // Tutorial is always unlocked
+                    return false; // Skip the original calculation
+                }
+
+                if (__instance.id >= 1001 && __instance.id <= 1006)
+                {
+                    long apItemId = 80020 + (__instance.id - 1001);
+                    __result = ArchipelagoManager.UnlockedCharacters.Contains(apItemId);
+                    return false; // Skip the original calculation
+                }
+            }
+            catch { }
+
+            return true;
+        }
+    }
+
+    // Forcefully enable the custom "MyButton" script using TryCast
+    [HarmonyPatch(typeof(CharacterSelectUIController), nameof(CharacterSelectUIController.UpdateButtonVisual))]
+    public class CharacterUpdateButtonVisualPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(CharacterSelectUIController __instance)
+        {
+            if (!ArchipelagoManager.IsConnected) return;
+
+            try
+            {
+                int charId = __instance.curCharacterID;
+                bool isUnlocked = (charId == 1000) ? true : ArchipelagoManager.UnlockedCharacters.Contains(80020 + (charId - 1001));
+
+                if (__instance._selectBtn != null)
+                {
+                    // Safely cast the custom MyButton to its base Unity Selectable to force it on
+                    var selectable = __instance._selectBtn.TryCast<UnityEngine.UI.Selectable>();
+                    if (selectable != null)
+                    {
+                        selectable.interactable = isUnlocked;
+                    }
+                }
+            }
+            catch { }
+        }
+    }
+
+    // Handle the Padlocks, Shadows, and Gray Portraits
+    [HarmonyPatch(typeof(CharacterSelectUIController), nameof(CharacterSelectUIController.UpdateCharacterInfo))]
+    public class CharacterVisualLockPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(CharacterSelectUIController __instance, int characterID)
+        {
+            if (!ArchipelagoManager.IsConnected) return;
+
+            try
+            {
+                bool isUnlocked = (characterID == 1000) ? true : ArchipelagoManager.UnlockedCharacters.Contains(80020 + (characterID - 1001));
+
+                if (__instance._characterIconLock != null)
+                    __instance._characterIconLock.gameObject.SetActive(!isUnlocked);
+                
+                if (__instance._characterIconShadow != null)
+                    __instance._characterIconShadow.gameObject.SetActive(!isUnlocked);
+
+                if (__instance._characterIcon != null)
+                    __instance._characterIcon.color = isUnlocked ? Color.white : new Color(0.3f, 0.3f, 0.3f, 1f);
+            }
+            catch { }
+        }
+    }
+
+    // Block clicks on locked characters AND save the active character
+    [HarmonyPatch(typeof(CharacterSelectUIController), nameof(CharacterSelectUIController.OnSelectButtonClicked))]
+    public class CharacterSelectClickPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(CharacterSelectUIController __instance)
+        {
+            if (!ArchipelagoManager.IsConnected) return true;
+
+            try
+            {
+                int charId = __instance.curCharacterID;
+                
+                // If it's NOT the tutorial, verify we own it
+                if (charId != 1000)
+                {
+                    long apItemId = 80020 + (charId - 1001);
+                    if (!ArchipelagoManager.UnlockedCharacters.Contains(apItemId))
+                    {
+                        return false; // Block the click
+                    }
+                }
+
+                // If we reach this line, the click is valid. Save the character ID before starting the game.
+                ArchipelagoManager.ActiveCharacterID = charId;
+                RaccoinPlugin.ModLogger.LogMessage($"[AP] Starting run as Character ID: {charId}");
+            }
+            catch { }
+
+            return true; // Let the click go through
+        }
+    }
+    
+    // Saftey Net: Do the exact same thing if they click "Continue" instead of "Select"
+    [HarmonyPatch(typeof(CharacterSelectUIController), nameof(CharacterSelectUIController.OnContinueButtonClicked))]
+    public class CharacterContinueClickPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(CharacterSelectUIController __instance)
+        {
+            if (ArchipelagoManager.IsConnected)
+            {
+                ArchipelagoManager.ActiveCharacterID = __instance.curCharacterID;
+                RaccoinPlugin.ModLogger.LogMessage($"[AP] Continuing run as Character ID: {__instance.curCharacterID}");
+            }
+        }
+    }
+
+    // Force an inventory sync
+    [HarmonyPatch(typeof(CharacterSelectUIController), nameof(CharacterSelectUIController.ShowPanel))]
+    public class CharacterSelectSyncPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix()
+        {
+            if (!ArchipelagoManager.IsConnected) return;
+
+            try
+            {
+                // Clear the old list
+                ArchipelagoManager.UnlockedCharacters.Clear();
+
+                // Scan the entire Archipelago inventory for character IDs
+                foreach (var itemInfo in ArchipelagoManager.Session.Items.AllItemsReceived)
+                {
+                    long itemId = itemInfo.Item;
+                    if (itemId >= 80020 && itemId <= 80025)
+                    {
+                        ArchipelagoManager.UnlockedCharacters.Add(itemId);
+                    }
+                }
+                
+                RaccoinPlugin.ModLogger.LogMessage("[AP] Instantly synced Character Unlocks from server!");
+            }
+            catch (Exception e)
+            {
+                RaccoinPlugin.ModLogger.LogError($"[AP] Sync failed: {e.Message}");
+            }
+        }
+    }
+
+    // Prizeball Replacer
+    [HarmonyPatch(typeof(PrizeExcelData), nameof(PrizeExcelData.GetPrizeExcelItem))]
+    public class FakePrizeDatabasePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(PrizeExcelData __instance, ref int id, ref PrizeExcelItem __result)
+        {
+            // If the game asks for an AP Ball (80000)...
+            if (id == 80000)
+            {
+                // hand it the Coin Cage (4005) instead
+                // Because we pass 'id' by reference, modifying it here forces the original method
+                // to look up 4005 instead of crashing on 80000.
+                id = 4005; 
+                
+                // Let the original method run with the new ID
+                return true; 
+            }
+            
+            return true;
         }
     }
 

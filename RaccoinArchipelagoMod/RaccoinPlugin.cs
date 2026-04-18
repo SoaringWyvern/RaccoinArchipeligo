@@ -29,23 +29,27 @@ namespace RaccoinArchipelagoMod
             SavedCumulativeScore = Config.Bind("Archipelago", "CumulativeScore", 0L, "The total score accumulated across all AP rounds.");
             LastPlayedSeed = Config.Bind("Archipelago", "LastPlayedSeed", "", "The unique seed identifier.");
 
-            // FIX: Just call LoadSprite directly. It handles finding the embedded image itself!
             APLogoSprite = AssetLoader.LoadSprite();
 
             if (APLogoSprite != null) ModLogger.LogMessage("[AP] Successfully loaded AP_Logo.png into memory!");
             else ModLogger.LogWarning("[AP] Could not find AP_Logo.png!");
 
-            // 2. Setup UI
+            // Setup UI
             ClassInjector.RegisterTypeInIl2Cpp<ArchipelagoUI>();
             GameObject apUiObject = new GameObject("Archipelago UI Object");
             apUiObject.AddComponent<ArchipelagoUI>();
             UnityEngine.Object.DontDestroyOnLoad(apUiObject);
+
+            // Start Notification System
+            ClassInjector.RegisterTypeInIl2Cpp<APNotificationManager>();
+            GameObject uiManager = new GameObject("AP_NotificationOverlay");
+            uiManager.AddComponent<APNotificationManager>();
+            UnityEngine.Object.DontDestroyOnLoad(uiManager);
             
-            // 3. Apply Patches
+            // Apply Patches
             Harmony.CreateAndPatchAll(typeof(RaccoinPlugin).Assembly);
         }
 
-        // DATA INJECTION METHOD
         public void PatchMilestoneRequirements()
         {
             try
@@ -60,7 +64,6 @@ namespace RaccoinArchipelagoMod
 
                 var milestoneItems = dataManager.milestoneExcelData.items;
 
-                // 1. REPROGRAM THE GAME'S MATH
                 for (int i = 0; i < ArchipelagoManager.ScoreMilestones.Length; i++)
                 {
                     if (i < milestoneItems.Count)
@@ -83,11 +86,10 @@ namespace RaccoinArchipelagoMod
                     }
                 }
                 
-                // 2. UI SCREEN WIPE
-                // FindObjectsOfTypeAll forces Unity to find the UI elements even if the menu is currently closed/hidden
+                // UI SCREEN WIPE
                 var activeMilestoneBoxes = UnityEngine.Resources.FindObjectsOfTypeAll<MilestoneStageView>();
                 
-                // Log exactly how many boxes it found so we can verify the GC didn't eat them
+                // Log exactly how many boxes it found
                 ModLogger.LogMessage($"[AP UI] Screen Sweep found {activeMilestoneBoxes.Count} Milestone Boxes.");
                 
                 foreach (var box in activeMilestoneBoxes)
@@ -134,7 +136,7 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // Asset Loader (for custom AP Coin image and others tba)
+    // Asset Loader (for custom AP Coin image and others tbd)
     public static class AssetLoader
     {
         private static Sprite _cachedSprite;

@@ -12,27 +12,35 @@ namespace RaccoinArchipelagoMod
     {
         public static ArchipelagoSession Session;
         public static bool IsConnected => Session != null && Session.Socket.Connected;
-        
         public static int LocationsChecked = 0;
-        public static int ProcessedItemIndex = 0; 
-
+        public static int ProcessedItemIndex = 0;
         public static int AP_PointsValue = 100;
-    
         public static int AP_SmallTowerCoins = 100;
         public static int AP_MediumTowerCoins = 250;
         public static int AP_LargeTowerCoins = 500;
-        
         public static int AP_WheelSpinSmall = 3;
         public static int AP_WheelSpinMedium = 4;
         public static int AP_WheelSpinLarge = 5;
-
         public static int AP_GiftRainSmall = 30;
         public static int AP_GiftRainMedium = 40;
         public static int AP_GiftRainLarge = 50;
-
         public static int AP_EarthquakeShakes = 7;
         public static int AP_RestockCoins = 40;
         public static int AP_TubeLauncherCoins = 20;
+        public static HashSet<long> UnlockedCharacters = new HashSet<long>();
+        // The ID of the character the player just selected in the menu
+        public static int ActiveCharacterID = 1001; // Defaults to Manager
+
+        // Tracks how many AP locations each specific character has checked (Max 17)
+        public static Dictionary<int, int> CharacterDropCounts = new Dictionary<int, int>()
+        {
+            { 1001, 0 }, // Manager
+            { 1002, 0 }, // Biologist
+            { 1003, 0 }, // Chemist
+            { 1004, 0 }, // Trader
+            { 1005, 0 }, // Astronomer
+            { 1006, 0 }  // Big Eater
+        };
 
         // Initialize the Milestones array to set aside the slots in memory and avoid checks being send to the sever prematurely
         public static long[] ScoreMilestones = new long[] {
@@ -112,6 +120,24 @@ namespace RaccoinArchipelagoMod
                     // Save the file
                     RaccoinPlugin.Instance.Config.Save();
                 }
+
+                UnlockedCharacters.Clear();
+
+                RaccoinPlugin.ModLogger.LogMessage("--- CHECKING STARTING INVENTORY ---");
+                foreach (var itemInfo in Session.Items.AllItemsReceived)
+                {
+                    long itemId = itemInfo.Item;
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP SYNC] Server says we own Item ID: {itemId}");
+                    
+                    if (itemId >= 80020 && itemId <= 80025)
+                    {
+                        UnlockedCharacters.Add(itemId);
+                        RaccoinPlugin.ModLogger.LogMessage($"---> STARTER CHARACTER CAUGHT! (ID: {itemId})");
+                    }
+                }
+                RaccoinPlugin.ModLogger.LogMessage("-----------------------------------");
+
+                Session.MessageLog.OnMessageReceived += OnMessageReceived;
                 
                 // Get dynamic event parameters from AP server
                 if (loginSuccess.SlotData.TryGetValue("ap_points_value", out var pv)) AP_PointsValue = Convert.ToInt32(pv);
@@ -150,6 +176,18 @@ namespace RaccoinArchipelagoMod
             }
         }
 
+        private static void OnMessageReceived(Archipelago.MultiClient.Net.MessageLog.Messages.LogMessage message)
+        {
+
+            string text = message.ToString();
+            
+            // Send it to the UI
+            APNotificationManager.SendNotification(text);
+            
+            // Also print it to the BepInEx console just so we have a record of it
+            RaccoinPlugin.ModLogger.LogMessage($"[AP LOG] {text}");
+        }
+
         public static void ScoutMilestoneLocations()
         {
             if (Session == null || !Session.Socket.Connected) return;
@@ -184,11 +222,20 @@ namespace RaccoinArchipelagoMod
         {
             if (Session == null || !Session.Socket.Connected) return;
 
+            // Create a temporary list to hold all the checks we unlock this frame
+            List<long> checksToSend = new List<long>();
+
             while (MilestonesClaimed < ScoreMilestones.Length && currentTotalScore >= ScoreMilestones[MilestonesClaimed])
             {
-                long locationIdToSend = MilestoneLocationIDs[MilestonesClaimed];
-                Session.Locations.CompleteLocationChecks(locationIdToSend); 
+                checksToSend.Add(MilestoneLocationIDs[MilestonesClaimed]);
                 MilestonesClaimed++;
+            }
+
+            // If we gathered any checks, send them all in a single network packet
+            if (checksToSend.Count > 0)
+            {
+                Session.Locations.CompleteLocationChecks(checksToSend.ToArray());
+                RaccoinPlugin.ModLogger.LogMessage($"[AP] Batched and sent {checksToSend.Count} Milestone Checks to the server!");
             }
         }
 
