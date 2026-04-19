@@ -27,6 +27,24 @@ namespace RaccoinArchipelagoMod
         public static int AP_EarthquakeShakes = 7;
         public static int AP_RestockCoins = 40;
         public static int AP_TubeLauncherCoins = 20;
+
+        // Tracks ALL Archipelago items the player has received
+        public static HashSet<long> UnlockedItems = new HashSet<long>();
+
+        // Maps Vanilla Coin IDs to AP Item IDs
+        public static Dictionary<int, long> CoinIdMapping = new Dictionary<int, long>();
+
+        // Sets up the dictionary math
+        public static void InitializeCoinMapping()
+        {
+            CoinIdMapping.Clear();
+            
+            for (int i = 2001; i <= 2123; i++)
+            {
+                // The AP ID is always 80000 + the Vanilla ID
+                CoinIdMapping[i] = 80000 + i; 
+            }
+        }
         public static HashSet<long> UnlockedCharacters = new HashSet<long>();
         // The ID of the character the player just selected in the menu
         public static int ActiveCharacterID = 1001; // Defaults to Manager
@@ -121,7 +139,10 @@ namespace RaccoinArchipelagoMod
                     RaccoinPlugin.Instance.Config.Save();
                 }
 
+                // --- AP INVENTORY SYNC ---
+                InitializeCoinMapping(); // 1. Map Vanilla IDs to AP IDs
                 UnlockedCharacters.Clear();
+                UnlockedItems.Clear();   // 2. Wipe old session data from memory
 
                 RaccoinPlugin.ModLogger.LogMessage("--- CHECKING STARTING INVENTORY ---");
                 foreach (var itemInfo in Session.Items.AllItemsReceived)
@@ -129,10 +150,16 @@ namespace RaccoinArchipelagoMod
                     long itemId = itemInfo.Item;
                     RaccoinPlugin.ModLogger.LogMessage($"[AP SYNC] Server says we own Item ID: {itemId}");
                     
+                    // Characters (80020 - 80025)
                     if (itemId >= 80020 && itemId <= 80025)
                     {
                         UnlockedCharacters.Add(itemId);
                         RaccoinPlugin.ModLogger.LogMessage($"---> STARTER CHARACTER CAUGHT! (ID: {itemId})");
+                    }
+                    // Coins (82001 - 82123)
+                    else if (itemId >= 82001 && itemId <= 82123)
+                    {
+                        UnlockedItems.Add(itemId);
                     }
                 }
                 RaccoinPlugin.ModLogger.LogMessage("-----------------------------------");
@@ -265,5 +292,41 @@ namespace RaccoinArchipelagoMod
                 File.WriteAllText(saveFilePath, ProcessedItemIndex.ToString());
             }
         }
+
+        // This physically rips locked coins out of the game's IL2CPP lists safely
+    public static void FilterCoinList(Il2CppSystem.Collections.Generic.List<int> il2cppList)
+    {
+        if (il2cppList == null) return;
+
+        // Create a temporary standard C# list to hold the coins we are allowed to keep
+        var safeList = new System.Collections.Generic.List<int>();
+
+        for (int i = 0; i < il2cppList.Count; i++)
+        {
+            int coinId = il2cppList[i];
+            
+            // Check if it's one of our randomized coins (2001-2123)
+            if (CoinIdMapping.TryGetValue(coinId, out long apItemId))
+            {
+                // Only keep it if Archipelago says we own it!
+                if (UnlockedItems.Contains(apItemId))
+                {
+                    safeList.Add(coinId);
+                }
+            }
+            else
+            {
+                // It's a basic coin (1001-1003) or system object (4000s), always keep it!
+                safeList.Add(coinId);
+            }
+        }
+
+        // Nuke the game's list completely, and refill it only with our allowed coins
+        il2cppList.Clear();
+        foreach (int allowedCoin in safeList)
+        {
+            il2cppList.Add(allowedCoin);
+        }
+    }
     }
 }

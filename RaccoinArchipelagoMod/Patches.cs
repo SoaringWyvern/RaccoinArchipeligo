@@ -46,10 +46,10 @@ namespace RaccoinArchipelagoMod
 
                 int currentCount = ArchipelagoManager.CharacterDropCounts[activeChar];
 
-                // Check if they have reached the limit of 17 checks for this character
-                if (currentCount < 17) 
+                // Check if they have reached the limit of 50 checks for this character
+                if (currentCount < 50) 
                 {
-                    currentCount++; // Increment the count (1 to 17)
+                    currentCount++; // Increment the count (1 to 50)
                     ArchipelagoManager.CharacterDropCounts[activeChar] = currentCount; 
 
                     // The Math: 
@@ -63,14 +63,14 @@ namespace RaccoinArchipelagoMod
                     ArchipelagoManager.Session.Locations.CompleteLocationChecks(locationToSend);
                     
                     RaccoinPlugin.ModLogger.LogMessage($"=========================================");
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Sent Check {locationToSend} (Character {activeChar} - Check {currentCount}/17)!");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Sent Check {locationToSend} (Character {activeChar} - Check {currentCount}/50)!");
                     RaccoinPlugin.ModLogger.LogMessage($"=========================================");
                 }
                 else
                 {
-                    // They caught an AP ball, but they already found all 17 for this character
-                    APNotificationManager.SendNotification("You have already found all 17 items for this character!");
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Character {activeChar} is maxed out at 17 checks!");
+                    // They caught an AP ball, but they already found all 50 for this character
+                    APNotificationManager.SendNotification("You have already found all 50 items for this character!");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Character {activeChar} is maxed out at 50 checks!");
                 }
 
                 return false; // Prevent the vanilla game from trying to process ID 80000
@@ -96,8 +96,8 @@ namespace RaccoinArchipelagoMod
 
                 int currentCount = ArchipelagoManager.CharacterDropCounts[activeChar];
 
-                // Check if they have reached the limit of 17 checks for this character
-                if (currentCount < 17) 
+                // Check if they have reached the limit of 50 checks for this character
+                if (currentCount < 50) 
                 {
                     currentCount++; 
                     ArchipelagoManager.CharacterDropCounts[activeChar] = currentCount; 
@@ -110,13 +110,13 @@ namespace RaccoinArchipelagoMod
                     
                     RaccoinPlugin.ModLogger.LogMessage($"=========================================");
                     RaccoinPlugin.ModLogger.LogMessage($"[AP] CAUGHT AP BALL (INVENTORY FULL OVERRIDE)!");
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Sent Check {locationToSend} (Character {activeChar} - Check {currentCount}/17)!");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Sent Check {locationToSend} (Character {activeChar} - Check {currentCount}/50)!");
                     RaccoinPlugin.ModLogger.LogMessage($"=========================================");
                 }
                 else
                 {
-                    APNotificationManager.SendNotification("You have already found all 17 items for this character!");
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Character {activeChar} is maxed out at 17 checks! (Caught while inventory full)");
+                    APNotificationManager.SendNotification("You have already found all 50 items for this character!");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Character {activeChar} is maxed out at 50 checks! (Caught while inventory full)");
                 }
 
                 // Return false to prevent the game from deleting our AP ball
@@ -159,6 +159,20 @@ namespace RaccoinArchipelagoMod
                 {
                     StealDataPatch.CurrentGameData.curPt += ArchipelagoManager.AP_PointsValue;
                     RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Gave the player {ArchipelagoManager.AP_PointsValue} Points!");
+                }
+                // --- COIN UNLOCKS (AP IDs 82001 to 82123) ---
+                else if (incomingItemId >= 82001 && incomingItemId <= 82123)
+                {
+                    // 1. Add it to our internal AP memory so the unlock patch sees it
+                    ArchipelagoManager.UnlockedItems.Add(incomingItemId);
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Unlocked a new Drop Coin (AP ID: {incomingItemId})!");
+
+                    // 2. Force the active game board to immediately reshuffle its drop deck!
+                    if (StealDataPatch.CurrentGameData != null)
+                    {
+                        StealDataPatch.CurrentGameData.RefreshDrawPool();
+                        RaccoinPlugin.ModLogger.LogMessage("[AP] Successfully forced the game to refresh the active drop pool!");
+                    }
                 }
                 // EVENTS & TRAPS
                 else if (incomingItemId >= 80003 && incomingItemId <= 80017)
@@ -748,6 +762,119 @@ namespace RaccoinArchipelagoMod
                 return true; 
             }
             
+            return true;
+        }
+    }
+
+    // // --- TEMPORARY DEV TOOL: RICH PYTHON DICTIONARY DUMPER V2 ---
+    // [HarmonyPatch(typeof(CoinExcelData), nameof(CoinExcelData.InitExtra))]
+    // public class CoinDataDumpPatch
+    // {
+    //     private static bool hasDumped = false;
+
+    //     [HarmonyPostfix]
+    //     public static void Postfix(CoinExcelData __instance)
+    //     {
+    //         if (hasDumped) return; // Only dump once
+    //         hasDumped = true;
+
+    //         try
+    //         {
+    //             string dumpPath = System.IO.Path.Combine(BepInEx.Paths.PluginPath, "Python_Coin_Data_Dump.txt");
+                
+    //             using (System.IO.StreamWriter writer = new System.IO.StreamWriter(dumpPath))
+    //             {
+    //                 writer.WriteLine("        # --- COPY AND PASTE THIS INTO YOUR PYTHON CODE ---");
+    //                 writer.WriteLine("        coin_data = {");
+                    
+    //                 for (int i = 0; i < __instance.items.Length; i++)
+    //                 {
+    //                     var coin = __instance.items[i];
+                        
+    //                     if (coin != null && coin.id >= 2001 && coin.id <= 2123)
+    //                     {
+    //                         // ---> TESTING YOUR THEORY HERE <---
+    //                         // Asking the Master Data class instead of the Item class
+    //                         string realName = __instance.GetName(coin.id);
+    //                         string realDesc = __instance.GetDesc(coin.id);
+                            
+    //                         string coinType = coin.GetCoinType().ToString(); 
+                            
+    //                         // Clean up quotes and flatten line breaks
+    //                         realName = realName.Replace("\"", "\\\"").Trim();
+    //                         realDesc = realDesc.Replace("\"", "\\\"").Replace("\n", " ").Replace("\r", "").Trim();
+                            
+    //                         long apId = 80000 + coin.id;
+                            
+    //                         writer.WriteLine($"            \"{realName}\": {{");
+    //                         writer.WriteLine($"                \"id\": {apId},");
+    //                         writer.WriteLine($"                \"desc\": \"{realDesc}\",");
+    //                         writer.WriteLine($"                \"type\": \"{coinType}\"");
+    //                         writer.WriteLine($"            }},");
+    //                     }
+    //                 }
+                    
+    //                 writer.WriteLine("        }");
+    //             }
+                
+    //             RaccoinPlugin.ModLogger.LogWarning($"[DEV TOOL] Successfully generated Rich Python Dictionary at: {dumpPath}");
+    //         }
+    //         catch (Exception e)
+    //         {
+    //             RaccoinPlugin.ModLogger.LogError($"[DEV TOOL] Failed to dump Coin IDs: {e.Message}");
+    //         }
+    //     }
+    // }
+
+    // --- 1. LOCK THE BOARD SPAWNER ---
+    [HarmonyPatch(typeof(GameplayData), nameof(GameplayData.RefreshDrawPool))]
+    public class SpawnerCoinFilterPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(GameplayData __instance)
+        {
+            if (!ArchipelagoManager.IsConnected || __instance.list_drawPool_coin == null) return;
+            
+            // Physically rip the locked coins out of the active drop pool
+            ArchipelagoManager.FilterCoinList(__instance.list_drawPool_coin);
+        }
+    }
+
+    // --- 2. LOCK THE SHOP GENERATOR ---
+    [HarmonyPatch(typeof(CoinExcelData), nameof(CoinExcelData.GetCoinShopList))]
+    public class ShopCoinFilterPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(ref Il2CppSystem.Collections.Generic.List<int> __result)
+        {
+            if (!ArchipelagoManager.IsConnected || __result == null) return;
+
+            // Rips the locked coins out of the shop generation table
+            ArchipelagoManager.FilterCoinList(__result);
+        }
+    }
+
+    // --- 3. PADLOCK THE CODEX UI ---
+    [HarmonyPatch(typeof(CoinExcelItem), nameof(CoinExcelItem.isRealUnlock), MethodType.Getter)]
+    public class CoinIsRealUnlockPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(CoinExcelItem __instance, ref bool __result)
+        {
+            if (!ArchipelagoManager.IsConnected) return true;
+
+            try
+            {
+                int coinId = __instance.id;
+                if (ArchipelagoManager.CoinIdMapping.TryGetValue(coinId, out long apItemId))
+                {
+                    // Forces the UI to draw a padlock over the coin if we don't own it in AP
+                    __result = ArchipelagoManager.UnlockedItems.Contains(apItemId);
+                    return false; 
+                }
+            }
+            catch { }
+
             return true;
         }
     }
