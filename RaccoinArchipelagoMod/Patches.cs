@@ -4,6 +4,7 @@ using System.IO;
 using BepInEx;
 using System;
 
+
 namespace RaccoinArchipelagoMod
 {
     // AP Ball Spawner
@@ -128,7 +129,7 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // DATA THIEF
+    // HOOK INTO GAME DATA
     [HarmonyPatch(typeof(GameplayData), nameof(GameplayData.NewRound))]
     public class StealDataPatch
     {
@@ -160,14 +161,14 @@ namespace RaccoinArchipelagoMod
                     StealDataPatch.CurrentGameData.curPt += ArchipelagoManager.AP_PointsValue;
                     RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Gave the player {ArchipelagoManager.AP_PointsValue} Points!");
                 }
-                // --- COIN UNLOCKS (AP IDs 82001 to 82123) ---
+                // COIN UNLOCKS (AP IDs 82001 to 82123)
                 else if (incomingItemId >= 82001 && incomingItemId <= 82123)
                 {
-                    // 1. Add it to our internal AP memory so the unlock patch sees it
+                    // Add it to our internal AP memory so the unlock patch sees it
                     ArchipelagoManager.UnlockedItems.Add(incomingItemId);
                     RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Unlocked a new Drop Coin (AP ID: {incomingItemId})!");
 
-                    // 2. Force the active game board to immediately reshuffle its drop deck!
+                    // Force the active game board to immediately reshuffle its drop deck!
                     if (StealDataPatch.CurrentGameData != null)
                     {
                         StealDataPatch.CurrentGameData.RefreshDrawPool();
@@ -578,7 +579,7 @@ namespace RaccoinArchipelagoMod
 
     // CHARACTER SELECT
 
-    // Root Save File Bypass
+    // Save File Bypass
     [HarmonyPatch(typeof(CharacterExcelItem), nameof(CharacterExcelItem.isRealUnlock), MethodType.Getter)]
     public class CharacterIsRealUnlockPatch
     {
@@ -608,7 +609,7 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // Forcefully enable the custom "MyButton" script using TryCast
+    // Override the character "Select" button
     [HarmonyPatch(typeof(CharacterSelectUIController), nameof(CharacterSelectUIController.UpdateButtonVisual))]
     public class CharacterUpdateButtonVisualPatch
     {
@@ -724,7 +725,7 @@ namespace RaccoinArchipelagoMod
                 // Clear the old list
                 ArchipelagoManager.UnlockedCharacters.Clear();
 
-                // Scan the entire Archipelago inventory for character IDs
+                // Scan the Archipelago inventory for character IDs
                 foreach (var itemInfo in ArchipelagoManager.Session.Items.AllItemsReceived)
                 {
                     long itemId = itemInfo.Item;
@@ -766,67 +767,51 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // // --- TEMPORARY DEV TOOL: RICH PYTHON DICTIONARY DUMPER V2 ---
-    // [HarmonyPatch(typeof(CoinExcelData), nameof(CoinExcelData.InitExtra))]
-    // public class CoinDataDumpPatch
+    // // TEMPORARY DEV TOOL: TOOLTIP DATA VIEWER
+    // // Used for grabbing coin IDs and names by hovering over them in the Collections screen
+    // [HarmonyPatch(typeof(CollectionUIView), nameof(CollectionUIView.ShowInfo))]
+    // public class AutoCodexTooltipDumper
     // {
-    //     private static bool hasDumped = false;
-
     //     [HarmonyPostfix]
-    //     public static void Postfix(CoinExcelData __instance)
+    //     public static void Postfix(CollectionUIView __instance)
     //     {
-    //         if (hasDumped) return; // Only dump once
-    //         hasDumped = true;
-
     //         try
     //         {
-    //             string dumpPath = System.IO.Path.Combine(BepInEx.Paths.PluginPath, "Python_Coin_Data_Dump.txt");
-                
-    //             using (System.IO.StreamWriter writer = new System.IO.StreamWriter(dumpPath))
+    //             // 1. Grab the ID from the instance (just like your reference used __instance)
+    //             int gameId = __instance.id;
+    //             if (gameId <= 0) return;
+
+    //             // 2. Grab the name from the slot's text component
+    //             string coinName = "Unknown";
+    //             if (__instance.nameText != null)
     //             {
-    //                 writer.WriteLine("        # --- COPY AND PASTE THIS INTO YOUR PYTHON CODE ---");
-    //                 writer.WriteLine("        coin_data = {");
-                    
-    //                 for (int i = 0; i < __instance.items.Length; i++)
-    //                 {
-    //                     var coin = __instance.items[i];
-                        
-    //                     if (coin != null && coin.id >= 2001 && coin.id <= 2123)
-    //                     {
-    //                         // ---> TESTING YOUR THEORY HERE <---
-    //                         // Asking the Master Data class instead of the Item class
-    //                         string realName = __instance.GetName(coin.id);
-    //                         string realDesc = __instance.GetDesc(coin.id);
-                            
-    //                         string coinType = coin.GetCoinType().ToString(); 
-                            
-    //                         // Clean up quotes and flatten line breaks
-    //                         realName = realName.Replace("\"", "\\\"").Trim();
-    //                         realDesc = realDesc.Replace("\"", "\\\"").Replace("\n", " ").Replace("\r", "").Trim();
-                            
-    //                         long apId = 80000 + coin.id;
-                            
-    //                         writer.WriteLine($"            \"{realName}\": {{");
-    //                         writer.WriteLine($"                \"id\": {apId},");
-    //                         writer.WriteLine($"                \"desc\": \"{realDesc}\",");
-    //                         writer.WriteLine($"                \"type\": \"{coinType}\"");
-    //                         writer.WriteLine($"            }},");
-    //                     }
-    //                 }
-                    
-    //                 writer.WriteLine("        }");
+    //                 coinName = __instance.nameText.text.Trim();
     //             }
-                
-    //             RaccoinPlugin.ModLogger.LogWarning($"[DEV TOOL] Successfully generated Rich Python Dictionary at: {dumpPath}");
+
+    //             // 3. Category Logic
+    //             long apId = 0;
+    //             if (gameId >= 1000 && gameId < 2000)      apId = 81000 + (gameId % 1000);
+    //             else if (gameId >= 2000 && gameId < 3000) apId = 82000 + (gameId % 2000);
+    //             else if (gameId >= 3000 && gameId < 4000) apId = 83000 + (gameId % 3000);
+    //             else if (gameId >= 5000 && gameId < 6000) apId = 85000 + (gameId % 5000);
+
+    //             // 4. Log it
+    //             string dumpPath = System.IO.Path.Combine(BepInEx.Paths.PluginPath, "Python_Final_Mapping.txt");
+    //             using (System.IO.StreamWriter writer = new System.IO.StreamWriter(dumpPath, true))
+    //             {
+    //                 writer.WriteLine($"{coinName} | {gameId} | {apId}");
+    //             }
+
+    //             RaccoinPlugin.ModLogger.LogWarning($"[AP SPY] Logged: {coinName} (ID: {gameId})");
     //         }
     //         catch (Exception e)
     //         {
-    //             RaccoinPlugin.ModLogger.LogError($"[DEV TOOL] Failed to dump Coin IDs: {e.Message}");
+    //             RaccoinPlugin.ModLogger.LogError($"[AP SPY] Hook failed: {e.Message}");
     //         }
     //     }
     // }
 
-    // --- 1. LOCK THE BOARD SPAWNER ---
+    // LOCK THE COIN POOL
     [HarmonyPatch(typeof(GameplayData), nameof(GameplayData.RefreshDrawPool))]
     public class SpawnerCoinFilterPatch
     {
@@ -835,12 +820,12 @@ namespace RaccoinArchipelagoMod
         {
             if (!ArchipelagoManager.IsConnected || __instance.list_drawPool_coin == null) return;
             
-            // Physically rip the locked coins out of the active drop pool
+            // Take any the locked coins out of the active draw pool
             ArchipelagoManager.FilterCoinList(__instance.list_drawPool_coin);
         }
     }
 
-    // --- 2. LOCK THE SHOP GENERATOR ---
+    // LOCK THE SHOP COIN POOL
     [HarmonyPatch(typeof(CoinExcelData), nameof(CoinExcelData.GetCoinShopList))]
     public class ShopCoinFilterPatch
     {
@@ -849,12 +834,12 @@ namespace RaccoinArchipelagoMod
         {
             if (!ArchipelagoManager.IsConnected || __result == null) return;
 
-            // Rips the locked coins out of the shop generation table
+            // Takes the locked coins out of the shop generation table
             ArchipelagoManager.FilterCoinList(__result);
         }
     }
 
-    // --- 3. PADLOCK THE CODEX UI ---
+    // PADLOCK THE CODEX UI
     [HarmonyPatch(typeof(CoinExcelItem), nameof(CoinExcelItem.isRealUnlock), MethodType.Getter)]
     public class CoinIsRealUnlockPatch
     {
@@ -868,7 +853,7 @@ namespace RaccoinArchipelagoMod
                 int coinId = __instance.id;
                 if (ArchipelagoManager.CoinIdMapping.TryGetValue(coinId, out long apItemId))
                 {
-                    // Forces the UI to draw a padlock over the coin if we don't own it in AP
+                    // Draw a padlock over the coin if we don't own it in AP
                     __result = ArchipelagoManager.UnlockedItems.Contains(apItemId);
                     return false; 
                 }
