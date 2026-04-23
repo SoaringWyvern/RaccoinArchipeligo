@@ -5,6 +5,7 @@ using Archipelago.MultiClient.Net;
 using Archipelago.MultiClient.Net.Enums;
 using Archipelago.MultiClient.Net.Models;
 using Archipelago.MultiClient.Net.Helpers;
+using UnityEngine;
 
 namespace RaccoinArchipelagoMod
 {
@@ -28,28 +29,17 @@ namespace RaccoinArchipelagoMod
         public static int AP_RestockCoins = 40;
         public static int AP_TubeLauncherCoins = 20;
 
-        // Tracks ALL Archipelago items the player has received
+        // Inventory Tracking
         public static HashSet<long> UnlockedItems = new HashSet<long>();
-
-        // Maps Vanilla Coin IDs to AP Item IDs
+        public static HashSet<long> UnlockedCharacters = new HashSet<long>();
+        
+        // Mapping: Vanilla Coin ID -> AP Item ID
         public static Dictionary<int, long> CoinIdMapping = new Dictionary<int, long>();
 
-        // Sets up the dictionary math
-        public static void InitializeCoinMapping()
-        {
-            CoinIdMapping.Clear();
-            
-            for (int i = 2001; i <= 2123; i++)
-            {
-                // The AP ID is always 80000 + the Vanilla ID
-                CoinIdMapping[i] = 80000 + i; 
-            }
-        }
-        public static HashSet<long> UnlockedCharacters = new HashSet<long>();
-        // The ID of the character the player just selected in the menu
-        public static int ActiveCharacterID = 1001; // Defaults to Manager
+        // Tracks the active character (1001-1006) for logic filtering
+        public static int ActiveCharacterID = 1001; 
 
-        // Tracks how many AP locations each specific character has checked (Max 17)
+        // Tracks how many AP locations each specific character has checked (Max 50)
         public static Dictionary<int, int> CharacterDropCounts = new Dictionary<int, int>()
         {
             { 1001, 0 }, // Manager
@@ -60,23 +50,37 @@ namespace RaccoinArchipelagoMod
             { 1006, 0 }  // Big Eater
         };
 
-        // Initialize the Milestones array to set aside the slots in memory and avoid checks being send to the sever prematurely
-        public static long[] ScoreMilestones = new long[] {
-            100000, 250000, 500000, 750000, 1000000, 1500000, 2000000, 2500000, 3000000, 4000000,
-            5000000, 6000000, 7500000, 10000000, 15000000, 20000000, 25000000, 30000000, 40000000,
-            50000000, 60000000, 75000000, 100000000, 150000000, 200000000, 250000000, 500000000, 1000000000
-        };
+        // Queue for processing incoming Archipelago items on the Unity main thread
+        public static Queue<long> ItemQueue = new Queue<long>();
+
+        // Score Milestones (Syncs with YAML Difficulty)
+        public static long[] ScoreMilestones = new long[28];
+        
+        // Milestone Location IDs
         public static readonly long[] MilestoneLocationIDs = {
-            4000, 4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008, 4009,
-            4010, 4011, 4012, 4013, 4014, 4015, 4016, 4017, 4018, 4019,
-            4020, 4021, 4022, 4023, 4024, 4025, 4026, 4027
+            90001, 90002, 90003, 90004, 90005, 90006, 90007, 90008, 90009, 90010,
+            90011, 90012, 90013, 90014, 90015, 90016, 90017, 90018, 90019, 90020,
+            90021, 90022, 90023, 90024, 90025, 90026, 90027, 90028
         }; 
         
         public static int MilestonesClaimed = 0;
         public static Dictionary<long, NetworkItem> ScoutedMilestones = new Dictionary<long, NetworkItem>();
-        
-        public static readonly long BaseLocationId = 81000;
-        public static readonly int MaxLocations = 50; 
+
+        public static void InitializeCoinMapping()
+        {
+            CoinIdMapping.Clear();
+            // Maps ranges 1000, 2000, 3000, and 5000 to the 80000 AP blocks
+            for (int i = 1000; i <= 6000; i++)
+            {
+                long apId = 0;
+                if (i >= 1000 && i < 2000)      apId = 81000 + (i % 1000);
+                else if (i >= 2000 && i < 3000) apId = 82000 + (i % 2000);
+                else if (i >= 3000 && i < 4000) apId = 83000 + (i % 3000);
+                else if (i >= 5000 && i < 6000) apId = 85000 + (i % 5000);
+
+                if (apId != 0) CoinIdMapping[i] = apId;
+            }
+        }
 
         public static bool Connect(string url, int port, string slotName, string password, out string errorMessage)
         {
@@ -84,16 +88,7 @@ namespace RaccoinArchipelagoMod
             try
             {
                 Session = ArchipelagoSessionFactory.CreateSession(url, port);
-                
-                LoginResult result = Session.TryConnectAndLogin(
-                    "RACCOIN", 
-                    slotName,
-                    ItemsHandlingFlags.AllItems, 
-                    new Version(0, 6, 7), 
-                    null, 
-                    null, 
-                    password
-                );
+                LoginResult result = Session.TryConnectAndLogin("raccoin", slotName, ItemsHandlingFlags.AllItems, new Version(0, 6, 7), null, null, password);
 
                 if (!result.Successful)
                 {
@@ -102,95 +97,48 @@ namespace RaccoinArchipelagoMod
                     return false; 
                 }
 
-                // Get milestone slot data from AP server
                 var loginSuccess = (LoginSuccessful)result;
-                if (loginSuccess.SlotData.ContainsKey("milestone_1"))
+
+                // Sync all 28 milestones from Slot Data
+                for (int i = 0; i < ScoreMilestones.Length; i++)
                 {
-                    for (int i = 0; i < 5; i++)
-                    {
-                        string key = $"milestone_{i + 1}";
-                        if (loginSuccess.SlotData.ContainsKey(key))
-                        {
-                            ScoreMilestones[i] = Convert.ToInt64(loginSuccess.SlotData[key]);
-                        }
-                    }
-                    RaccoinPlugin.ModLogger.LogMessage("[AP] Custom milestone values received from server.");
+                    string key = $"milestone_{i + 1}";
+                    if (loginSuccess.SlotData.TryGetValue(key, out var val))
+                        ScoreMilestones[i] = Convert.ToInt64(val);
                 }
 
-                // Get the game seed
+                // Seed Management
                 string currentSeed = Session.RoomState.Seed;
-                string currentSlotName = loginSuccess.SlotData.Count > 0 ? Session.Players.GetPlayerAlias(loginSuccess.Slot) : "UnknownPlayer";
-                string uniqueSessionId = $"{currentSeed}_{currentSlotName}";
-
-                // Check if the seed matches the one stored in the score file
+                string uniqueSessionId = $"{currentSeed}_{slotName}";
                 if (RaccoinPlugin.LastPlayedSeed.Value != uniqueSessionId)
                 {
-                    RaccoinPlugin.ModLogger.LogMessage("=========================================");
-                    RaccoinPlugin.ModLogger.LogMessage("[AP] NEW SEED DETECTED! Wiping cumulative score to 0.");
-                    RaccoinPlugin.ModLogger.LogMessage("=========================================");
-                    
-                    // Wipe the score
                     RaccoinPlugin.SavedCumulativeScore.Value = 0;
-                    
-                    // Save the new Seed ID so it doesn't wipe it again next round
                     RaccoinPlugin.LastPlayedSeed.Value = uniqueSessionId;
-                    
-                    // Save the file
                     RaccoinPlugin.Instance.Config.Save();
                 }
 
-                // --- AP INVENTORY SYNC ---
-                InitializeCoinMapping(); // 1. Map Vanilla IDs to AP IDs
+                // Inventory Initialization
+                InitializeCoinMapping();
                 UnlockedCharacters.Clear();
-                UnlockedItems.Clear();   // 2. Wipe old session data from memory
+                UnlockedItems.Clear();
 
-                RaccoinPlugin.ModLogger.LogMessage("--- CHECKING STARTING INVENTORY ---");
                 foreach (var itemInfo in Session.Items.AllItemsReceived)
                 {
                     long itemId = itemInfo.Item;
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP SYNC] Server says we own Item ID: {itemId}");
-                    
-                    // Characters (80020 - 80025)
-                    if (itemId >= 80020 && itemId <= 80025)
-                    {
-                        UnlockedCharacters.Add(itemId);
-                        RaccoinPlugin.ModLogger.LogMessage($"---> STARTER CHARACTER CAUGHT! (ID: {itemId})");
-                    }
-                    // Coins (82001 - 82123)
-                    else if (itemId >= 82001 && itemId <= 82123)
-                    {
-                        UnlockedItems.Add(itemId);
-                    }
+                    // Match character unlock range from Items.py (80901-80905)
+                    if (itemId >= 80900 && itemId <= 80905) UnlockedCharacters.Add(itemId);
+                    else if (itemId >= 81000 && itemId <= 86000) UnlockedItems.Add(itemId);
                 }
-                RaccoinPlugin.ModLogger.LogMessage("-----------------------------------");
 
                 Session.MessageLog.OnMessageReceived += OnMessageReceived;
-                
-                // Get dynamic event parameters from AP server
-                if (loginSuccess.SlotData.TryGetValue("ap_points_value", out var pv)) AP_PointsValue = Convert.ToInt32(pv);
-                
-                if (loginSuccess.SlotData.TryGetValue("ap_small_tower_coins", out var stv)) AP_SmallTowerCoins = Convert.ToInt32(stv);
-                if (loginSuccess.SlotData.TryGetValue("ap_medium_tower_coins", out var mtv)) AP_MediumTowerCoins = Convert.ToInt32(mtv);
-                if (loginSuccess.SlotData.TryGetValue("ap_large_tower_coins", out var ltv)) AP_LargeTowerCoins = Convert.ToInt32(ltv);
-                
-                if (loginSuccess.SlotData.TryGetValue("ap_wheel_spin_small", out var wsv)) AP_WheelSpinSmall = Convert.ToInt32(wsv);
-                if (loginSuccess.SlotData.TryGetValue("ap_wheel_spin_medium", out var wmv)) AP_WheelSpinMedium = Convert.ToInt32(wmv);
-                if (loginSuccess.SlotData.TryGetValue("ap_wheel_spin_large", out var wlv)) AP_WheelSpinLarge = Convert.ToInt32(wlv);
-
-                if (loginSuccess.SlotData.TryGetValue("ap_gift_rain_coins_small", out var rsv)) AP_GiftRainSmall = Convert.ToInt32(rsv);
-                if (loginSuccess.SlotData.TryGetValue("ap_gift_rain_coins_medium", out var rmv)) AP_GiftRainMedium = Convert.ToInt32(rmv);
-                if (loginSuccess.SlotData.TryGetValue("ap_gift_rain_coins_large", out var rlv)) AP_GiftRainLarge = Convert.ToInt32(rlv);
-
-                if (loginSuccess.SlotData.TryGetValue("ap_quake_shakes", out var qv)) AP_EarthquakeShakes = Convert.ToInt32(qv);
-                if (loginSuccess.SlotData.TryGetValue("ap_restock_coins", out var rcv)) AP_RestockCoins = Convert.ToInt32(rcv);
-                if (loginSuccess.SlotData.TryGetValue("ap_tube_coins", out var tcv)) AP_TubeLauncherCoins = Convert.ToInt32(tcv);
-
-                // Sync and Setup
-                SyncOnConnect();
                 Session.Items.ItemReceived += OnItemReceived;
+
+                // Sync Slot Data for Event Params
+                if (loginSuccess.SlotData.TryGetValue("ap_points_value", out var pv)) AP_PointsValue = Convert.ToInt32(pv);
+                if (loginSuccess.SlotData.TryGetValue("ap_restock_coins", out var rcv)) AP_RestockCoins = Convert.ToInt32(rcv);
+
+                SyncOnConnect();
                 ScoutMilestoneLocations();
-                
-                // Apply Milestone Patch
                 RaccoinPlugin.Instance.PatchMilestoneRequirements();
                 
                 return true; 
@@ -203,24 +151,78 @@ namespace RaccoinArchipelagoMod
             }
         }
 
+        private static void OnItemReceived(ReceivedItemsHelper helper)
+        {
+            while (ProcessedItemIndex < helper.AllItemsReceived.Count)
+            {
+                var item = helper.AllItemsReceived[ProcessedItemIndex];
+                long itemId = item.Item;
+
+                // 1. Add to HashSets instantly so UI menus unlock
+                if (itemId >= 80900 && itemId <= 80905) UnlockedCharacters.Add(itemId);
+                else UnlockedItems.Add(itemId);
+
+                // 2. Add to the Queue so the Postmaster patch can physically grant the rewards (Points/Events)
+                ItemQueue.Enqueue(itemId);
+
+                ProcessedItemIndex++;
+                
+                // 3. Persistence
+                string currentPlayer = Session.Players.GetPlayerName(Session.ConnectionInfo.Slot);
+                string currentSeed = Session.RoomState.Seed;
+                string saveFilePath = $"AP_Save_{currentPlayer}_{currentSeed}.txt";
+                File.WriteAllText(saveFilePath, ProcessedItemIndex.ToString());
+            }
+        }
+
+        public static void CheckScoreMilestones(long currentTotalScore)
+        {
+            if (Session == null || !IsConnected) return;
+
+            List<long> checksToSend = new List<long>();
+            while (MilestonesClaimed < ScoreMilestones.Length && currentTotalScore >= ScoreMilestones[MilestonesClaimed])
+            {
+                checksToSend.Add(MilestoneLocationIDs[MilestonesClaimed]);
+                MilestonesClaimed++;
+            }
+
+            if (checksToSend.Count > 0)
+            {
+                Session.Locations.CompleteLocationChecks(checksToSend.ToArray());
+                RaccoinPlugin.ModLogger.LogMessage($"[AP] Sent {checksToSend.Count} Milestones to server.");
+            }
+        }
+
+        public static void FilterCoinList(Il2CppSystem.Collections.Generic.List<int> il2cppList)
+        {
+            if (il2cppList == null) return;
+            var safeList = new List<int>();
+
+            for (int i = 0; i < il2cppList.Count; i++)
+            {
+                int coinId = il2cppList[i];
+                if (CoinIdMapping.TryGetValue(coinId, out long apItemId))
+                {
+                    if (UnlockedItems.Contains(apItemId)) safeList.Add(coinId);
+                }
+                else safeList.Add(coinId); // Keep basic metals (1001-1003)
+            }
+
+            il2cppList.Clear();
+            foreach (int allowedCoin in safeList) il2cppList.Add(allowedCoin);
+        }
+
         private static void OnMessageReceived(Archipelago.MultiClient.Net.MessageLog.Messages.LogMessage message)
         {
-
-            string text = message.ToString();
-            
-            // Send it to the UI
-            APNotificationManager.SendNotification(text);
-            
-            // Also print it to the BepInEx console just so we have a record of it
-            RaccoinPlugin.ModLogger.LogMessage($"[AP LOG] {text}");
+            APNotificationManager.SendNotification(message.ToString());
         }
 
         public static void ScoutMilestoneLocations()
         {
-            if (Session == null || !Session.Socket.Connected) return;
+            if (Session == null || !IsConnected) return;
             Session.Locations.ScoutLocationsAsync(false, MilestoneLocationIDs).ContinueWith(task =>
             {
-                if (task.IsCompletedSuccessfully && task.Result != null)
+                if (task.IsCompletedSuccessfully)
                 {
                     foreach (var networkItem in task.Result.Locations)
                         ScoutedMilestones[networkItem.Location] = networkItem;
@@ -230,103 +232,10 @@ namespace RaccoinArchipelagoMod
 
         public static void SyncOnConnect()
         {
-            if (Session == null || !Session.Socket.Connected) return;
-            LocationsChecked = Session.Locations.AllLocationsChecked.Count;
-
-            string currentPlayer = Session.Players.GetPlayerName(Session.ConnectionInfo.Slot);
-            string currentSeed = Session.RoomState.Seed; 
-            string saveFilePath = $"AP_Save_{currentPlayer}_{currentSeed}.txt";
-
-            if (File.Exists(saveFilePath))
-            {
-                if (int.TryParse(File.ReadAllText(saveFilePath), out int savedIndex))
-                    ProcessedItemIndex = savedIndex;
-            }
-            else ProcessedItemIndex = 0;
+            if (Session == null || !IsConnected) return;
+            string saveFilePath = $"AP_Save_{Session.Players.GetPlayerName(Session.ConnectionInfo.Slot)}_{Session.RoomState.Seed}.txt";
+            if (File.Exists(saveFilePath) && int.TryParse(File.ReadAllText(saveFilePath), out int savedIndex))
+                ProcessedItemIndex = savedIndex;
         }
-
-        public static void CheckScoreMilestones(long currentTotalScore)
-        {
-            if (Session == null || !Session.Socket.Connected) return;
-
-            // Create a temporary list to hold all the checks we unlock this frame
-            List<long> checksToSend = new List<long>();
-
-            while (MilestonesClaimed < ScoreMilestones.Length && currentTotalScore >= ScoreMilestones[MilestonesClaimed])
-            {
-                checksToSend.Add(MilestoneLocationIDs[MilestonesClaimed]);
-                MilestonesClaimed++;
-            }
-
-            // If we gathered any checks, send them all in a single network packet
-            if (checksToSend.Count > 0)
-            {
-                Session.Locations.CompleteLocationChecks(checksToSend.ToArray());
-                RaccoinPlugin.ModLogger.LogMessage($"[AP] Batched and sent {checksToSend.Count} Milestone Checks to the server!");
-            }
-        }
-
-        public static void SendNextCheck()
-        {
-            if (Session == null || !Session.Socket.Connected) return;
-            if (LocationsChecked < MaxLocations)
-            {
-                long nextCheckId = BaseLocationId + LocationsChecked;
-                Session.Locations.CompleteLocationChecks(nextCheckId);
-                LocationsChecked++;
-            }
-        }
-
-        public static Queue<long> ItemQueue = new Queue<long>();
-        private static void OnItemReceived(ReceivedItemsHelper helper)
-        {
-            while (ProcessedItemIndex < helper.AllItemsReceived.Count)
-            {
-                var item = helper.AllItemsReceived[ProcessedItemIndex];
-                ItemQueue.Enqueue(item.Item);
-                ProcessedItemIndex++;
-                
-                string currentPlayer = Session.Players.GetPlayerName(Session.ConnectionInfo.Slot);
-                string currentSeed = Session.RoomState.Seed;
-                string saveFilePath = $"AP_Save_{currentPlayer}_{currentSeed}.txt";
-                File.WriteAllText(saveFilePath, ProcessedItemIndex.ToString());
-            }
-        }
-
-        // This physically rips locked coins out of the game's IL2CPP lists safely
-    public static void FilterCoinList(Il2CppSystem.Collections.Generic.List<int> il2cppList)
-    {
-        if (il2cppList == null) return;
-
-        // Create a temporary standard C# list to hold the coins we are allowed to keep
-        var safeList = new System.Collections.Generic.List<int>();
-
-        for (int i = 0; i < il2cppList.Count; i++)
-        {
-            int coinId = il2cppList[i];
-            
-            // Check if it's one of our randomized coins (2001-2123)
-            if (CoinIdMapping.TryGetValue(coinId, out long apItemId))
-            {
-                // Only keep it if Archipelago says we own it!
-                if (UnlockedItems.Contains(apItemId))
-                {
-                    safeList.Add(coinId);
-                }
-            }
-            else
-            {
-                // It's a basic coin (1001-1003) or system object (4000s), always keep it!
-                safeList.Add(coinId);
-            }
-        }
-
-        // Nuke the game's list completely, and refill it only with our allowed coins
-        il2cppList.Clear();
-        foreach (int allowedCoin in safeList)
-        {
-            il2cppList.Add(allowedCoin);
-        }
-    }
     }
 }

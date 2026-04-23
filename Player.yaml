@@ -1,0 +1,42 @@
+# RACCOIN Player Settings
+# ---------------------------------------------------------
+# This file configures your unique adventure in RACCOIN.
+# Place this file in the 'Players' folder of your 
+# Archipelago installation before generating.
+
+name: YourPlayerName
+game: raccoin
+
+raccoin:
+  # --- Starting Character Guide ---
+  # Which character do you want to start with?
+  # 0: Manager
+  # 1: Biologist
+  # 2: Chemist
+  # 3: Trader
+  # 4: Astronomer
+  # 5: Big Eater
+  # 6: Random (Picks one of the above for you)
+  starting_character: 6
+
+  # --- Milestone Difficulty Guide ---
+  # Scales the score required for milestones.
+  # 0: Easy (50% score required)
+  # 1: Normal (100% score required)
+  # 2: Hard (200% score required)
+  milestone_difficulty: 1
+
+  # --- Trap Weight ---
+  # The total number of trap items (Doom, Earthquake, 
+  # Russian Roulette) placed into the item pool.
+  # Range: 0 to 100
+  trap_weight: 20
+
+  # --- Points Item Value ---
+  # The number of points granted to you in-game 
+  # every time you receive a '100 Points' item.
+  # Range: 10 to 1000
+  points_value: 100
+
+# ---------------------------------------------------------
+# End of RACCOIN Configuration

@@ -31,7 +31,54 @@ namespace RaccoinArchipelagoMod
         }
     }
 
-    // Put Items in AP Balls
+    // AP ITEMBALL CATCHER
+    // Handles checks safely regardless of which vanilla method triggers it
+    // (Rewritten to avoid double fire bug. Still needs work)
+    public static class APCatcher
+    {
+        private static float lastCatchTime = 0f;
+
+        public static void ProcessCatch()
+        {
+            // DEBOUNCE: If both AddPrize and RemovePrizeBall fire within 0.1 seconds of each other, 
+            // ignore the duplicate trigger to prevent double-sending!
+            if (Time.unscaledTime - lastCatchTime < 0.1f) return;
+            
+            lastCatchTime = Time.unscaledTime;
+
+            int activeChar = ArchipelagoManager.ActiveCharacterID;
+            
+            // Ignore the tutorial character (1000)
+            if (activeChar == 1000) return; 
+
+            int currentCount = ArchipelagoManager.CharacterDropCounts[activeChar];
+
+            // Check if they have reached the limit of 50 checks for this character
+            if (currentCount < 50) 
+            {
+                currentCount++; 
+                ArchipelagoManager.CharacterDropCounts[activeChar] = currentCount; 
+
+                // The * 1000 Math Fix is applied here so the server registers the IDs correctly!
+                long baseLocationId = 91000 + ((activeChar - 1001) * 1000);
+                long locationToSend = baseLocationId + currentCount;
+
+                ArchipelagoManager.Session.Locations.CompleteLocationChecks(locationToSend);
+                
+                RaccoinPlugin.ModLogger.LogMessage($"=========================================");
+                RaccoinPlugin.ModLogger.LogMessage($"[AP] CAUGHT AP BALL!");
+                RaccoinPlugin.ModLogger.LogMessage($"[AP] Sent Check {locationToSend} (Character {activeChar} - Check {currentCount}/50)!");
+                RaccoinPlugin.ModLogger.LogMessage($"=========================================");
+            }
+            else
+            {
+                APNotificationManager.SendNotification("You have already found all 50 items for this character!");
+                RaccoinPlugin.ModLogger.LogMessage($"[AP] Character {activeChar} is maxed out at 50 checks!");
+            }
+        }
+    }
+
+    // 1. Normal Catch (Inventory has space)
     [HarmonyPatch(typeof(GameplayData), nameof(GameplayData.AddPrize))]
     public class CatchPrizePatch
     {
@@ -40,48 +87,16 @@ namespace RaccoinArchipelagoMod
         {
             if (excelID == 80000)
             {
-                int activeChar = ArchipelagoManager.ActiveCharacterID;
-
-                // Ignore the tutorial character (1000) just in case an AP ball spawns there
-                if (activeChar == 1000) return false; 
-
-                int currentCount = ArchipelagoManager.CharacterDropCounts[activeChar];
-
-                // Check if they have reached the limit of 50 checks for this character
-                if (currentCount < 50) 
-                {
-                    currentCount++; // Increment the count (1 to 50)
-                    ArchipelagoManager.CharacterDropCounts[activeChar] = currentCount; 
-
-                    // The Math: 
-                    // Manager (1001) -> (1001-1001)*100 = 0 -> Base ID 81000
-                    // Biologist (1002) -> (1002-1001)*100 = 100 -> Base ID 81100
-                    long baseLocationId = 81000 + ((activeChar - 1001) * 100);
-                    
-                    // Add the count to the base ID (e.g. 81100 + 3 = 81103)
-                    long locationToSend = baseLocationId + currentCount;
-
-                    ArchipelagoManager.Session.Locations.CompleteLocationChecks(locationToSend);
-                    
-                    RaccoinPlugin.ModLogger.LogMessage($"=========================================");
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Sent Check {locationToSend} (Character {activeChar} - Check {currentCount}/50)!");
-                    RaccoinPlugin.ModLogger.LogMessage($"=========================================");
-                }
-                else
-                {
-                    // They caught an AP ball, but they already found all 50 for this character
-                    APNotificationManager.SendNotification("You have already found all 50 items for this character!");
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Character {activeChar} is maxed out at 50 checks!");
-                }
-
-                return false; // Prevent the vanilla game from trying to process ID 80000
+                APCatcher.ProcessCatch();
+                
+                // Return false to prevent the vanilla game from trying to load ID 80000 into the UI
+                return false; 
             }
-            return true; // Let normal prizes through
+            return true; 
         }
     }
 
-    // INVENTORY CAP CIRCUMVENTION
-    // Prevents AP Prizeballs from being deleted if the player's prize inventory is full when the ball falls.
+    // 2. Full Inventory Catch & Cleanup
     [HarmonyPatch(typeof(DataHelper_PrizeBall), nameof(DataHelper_PrizeBall.RemovePrizeBall))]
     public class CatchFullInventoryPatch
     {
@@ -90,41 +105,13 @@ namespace RaccoinArchipelagoMod
         {
             if (prizeBallData.excelID == 80000)
             {
-                int activeChar = ArchipelagoManager.ActiveCharacterID;
-
-                // Ignore the tutorial character (1000)
-                if (activeChar == 1000) return false; 
-
-                int currentCount = ArchipelagoManager.CharacterDropCounts[activeChar];
-
-                // Check if they have reached the limit of 50 checks for this character
-                if (currentCount < 50) 
-                {
-                    currentCount++; 
-                    ArchipelagoManager.CharacterDropCounts[activeChar] = currentCount; 
-
-                    // Calculate the specific location ID based on the character and count
-                    long baseLocationId = 81000 + ((activeChar - 1001) * 100);
-                    long locationToSend = baseLocationId + currentCount;
-
-                    ArchipelagoManager.Session.Locations.CompleteLocationChecks(locationToSend);
-                    
-                    RaccoinPlugin.ModLogger.LogMessage($"=========================================");
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] CAUGHT AP BALL (INVENTORY FULL OVERRIDE)!");
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Sent Check {locationToSend} (Character {activeChar} - Check {currentCount}/50)!");
-                    RaccoinPlugin.ModLogger.LogMessage($"=========================================");
-                }
-                else
-                {
-                    APNotificationManager.SendNotification("You have already found all 50 items for this character!");
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] Character {activeChar} is maxed out at 50 checks! (Caught while inventory full)");
-                }
-
-                // Return false to prevent the game from deleting our AP ball
-                return false; 
+                APCatcher.ProcessCatch();
+                
+                // CRITICAL FIX: ALWAYS return true here!
+                // If this returns false, the physical 3D ball never gets destroyed by the engine and permanently clogs the board.
+                return true; 
             }
             
-            // If it's a normal item (like a standard Coin Cage), let the game delete/auto-sell it natively
             return true; 
         }
     }
@@ -162,7 +149,7 @@ namespace RaccoinArchipelagoMod
                     RaccoinPlugin.ModLogger.LogMessage($"[AP REWARD] Gave the player {ArchipelagoManager.AP_PointsValue} Points!");
                 }
                 // COIN UNLOCKS (AP IDs 82001 to 82123)
-                else if (incomingItemId >= 82001 && incomingItemId <= 82123)
+                else if (incomingItemId >= 81000 && incomingItemId <= 86000)
                 {
                     // Add it to our internal AP memory so the unlock patch sees it
                     ArchipelagoManager.UnlockedItems.Add(incomingItemId);
@@ -598,7 +585,7 @@ namespace RaccoinArchipelagoMod
 
                 if (__instance.id >= 1001 && __instance.id <= 1006)
                 {
-                    long apItemId = 80020 + (__instance.id - 1001);
+                    long apItemId = 80900 + (__instance.id - 1001);
                     __result = ArchipelagoManager.UnlockedCharacters.Contains(apItemId);
                     return false; // Skip the original calculation
                 }
@@ -621,7 +608,7 @@ namespace RaccoinArchipelagoMod
             try
             {
                 int charId = __instance.curCharacterID;
-                bool isUnlocked = (charId == 1000) ? true : ArchipelagoManager.UnlockedCharacters.Contains(80020 + (charId - 1001));
+                bool isUnlocked = (charId == 1000) ? true : ArchipelagoManager.UnlockedCharacters.Contains(80900 + (charId - 1001));
 
                 if (__instance._selectBtn != null)
                 {
@@ -648,7 +635,7 @@ namespace RaccoinArchipelagoMod
 
             try
             {
-                bool isUnlocked = (characterID == 1000) ? true : ArchipelagoManager.UnlockedCharacters.Contains(80020 + (characterID - 1001));
+                bool isUnlocked = (characterID == 1000) ? true : ArchipelagoManager.UnlockedCharacters.Contains(80900 + (characterID - 1001));
 
                 if (__instance._characterIconLock != null)
                     __instance._characterIconLock.gameObject.SetActive(!isUnlocked);
@@ -679,7 +666,7 @@ namespace RaccoinArchipelagoMod
                 // If it's NOT the tutorial, verify we own it
                 if (charId != 1000)
                 {
-                    long apItemId = 80020 + (charId - 1001);
+                    long apItemId = 80900 + (charId - 1001);
                     if (!ArchipelagoManager.UnlockedCharacters.Contains(apItemId))
                     {
                         return false; // Block the click
@@ -729,7 +716,7 @@ namespace RaccoinArchipelagoMod
                 foreach (var itemInfo in ArchipelagoManager.Session.Items.AllItemsReceived)
                 {
                     long itemId = itemInfo.Item;
-                    if (itemId >= 80020 && itemId <= 80025)
+                    if (itemId >= 80900 && itemId <= 80905)
                     {
                         ArchipelagoManager.UnlockedCharacters.Add(itemId);
                     }
@@ -811,6 +798,12 @@ namespace RaccoinArchipelagoMod
     //     }
     // }
 
+    // --- UNIVERSAL COIN LOGGER ---
+    // Targets any coin slot (Codex or Character Select) that uses CollectionUIView
+
+    // --- CHARACTER SCREEN COIN LOGGER (REFINED) ---
+    // --- CHARACTER SCREEN COIN LOGGER (WITH NAMES) ---
+    
     // LOCK THE COIN POOL
     [HarmonyPatch(typeof(GameplayData), nameof(GameplayData.RefreshDrawPool))]
     public class SpawnerCoinFilterPatch

@@ -1,68 +1,92 @@
 from worlds.AutoWorld import World
-from worlds.generic.Rules import set_rule
 from BaseClasses import Region, Location, Item, ItemClassification
+from .Items import item_table, item_name_to_id, get_item_classification, CHARACTER_POOLS
+from .Locations import location_name_to_id
+from .Rules import setup_rules
+from .Options import RaccoinOptions
 
 class RaccoinWorld(World):
-    """
-    RACCOIN is a relaxing coin pusher arcade game. 
-    Drop coins, spin the slot machine, and collect prizes!
-    """
-    game = "RACCOIN" 
-    topology_present = False 
-
-    # ITEM DICTIONARY (What you receive)
-    item_name_to_id = {
-        "100 Points": 80002,
-        "Small Coin Tower": 80003,
-        "Medium Coin Tower": 80012, 
-        "Large Coin Tower": 80013,   
-        "Wheel Spin 3": 80004,
-        "Wheel Spin 4": 80014, 
-        "Wheel Spin 5": 80015,
-        "Doom Coin": 80005,
-        "Earthquake": 80006,
-        "Coin Restock": 80007,
-        "Russian Roulette": 80008,
-        "Tube Launchers": 80009,
-        "Small Gift Rain": 80010,
-        "Medium Gift Rain": 80016,
-        "Large Gift Rain": 80017,
-        "UFO": 80011,
-        "Unlock Manager": 80020,
-        "Unlock Biologist": 80021,
-        "Unlock Chemist": 80022,
-        "Unlock Trader": 80023,
-        "Unlock Astronomer": 80024,
-        "Unlock Big Eater": 80025,
-
-        **{f"Unlock Coin {i}": 80000 + i for i in range(2001, 2124)},
-    }
+    game = "raccoin"
+    topology_present = False
     
-    # LOCATION DICTIONARY (Where you check)
-    location_name_to_id = {
-        # SCORE MILESTONES (IDs 4000 - 4027) ---
-        **{f"Score Milestone {i}": 4000 + i - 1 for i in range(1, 29)},
 
-        # MANAGER CHECKS (IDs 81001 - 81050)
-        **{f"Manager Check {i}": 81000 + i for i in range(1, 51)},
+    options_dataclass = RaccoinOptions 
 
-        # BIOLOGIST CHECKS (IDs 81101 - 81150)
-        **{f"Biologist Check {i}": 81100 + i for i in range(1, 51)},
+    item_name_to_id = item_name_to_id
+    location_name_to_id = location_name_to_id
 
-        # CHEMIST CHECKS (IDs 81201 - 81250)
-        **{f"Chemist Check {i}": 81200 + i for i in range(1, 51)},
+    def generate_early(self):
+        # 1. Handle Random Character Selection
+        if self.options.starting_character == 6:  # 6 is 'Random'
+            # Pick a random index between 0 (Manager) and 5 (Big Eater)
+            new_char = self.multiworld.random.randint(0, 5)
+            self.options.starting_character.value = new_char
+            
+        # 2. Store the string name for easy access in other functions
+        char_list = ["Manager", "Biologist", "Chemist", "Trader", "Astronomer", "Big Eater"]
+        self.starting_char_name = char_list[self.options.starting_character.value]
 
-        # TRADER CHECKS (IDs 81301 - 81350)
-        **{f"Trader Check {i}": 81300 + i for i in range(1, 51)},
+    def create_regions(self):
+        menu_region = Region("Menu", self.player, self.multiworld)
+        self.multiworld.regions.append(menu_region)
+        for loc_name, loc_id in self.location_name_to_id.items():
+            menu_region.locations.append(Location(self.player, loc_name, loc_id, menu_region))
 
-        # ASTRONOMER CHECKS (IDs 81401 - 81450)
-        **{f"Astronomer Check {i}": 81400 + i for i in range(1, 51)},
+    def create_items(self):
+        start_char = self.starting_char_name
 
-        # BIG EATER CHECKS (IDs 81501 - 81550)
-        **{f"Big Eater Check {i}": 81500 + i for i in range(1, 51)},
-    }
+        # 1. Generate the core coins and characters
+        for name, data in item_table.items():
+            if name == f"Unlock {start_char}":
+                starting_item = self.create_item(name, ItemClassification.progression)
+                self.multiworld.push_precollected(starting_item)
+                continue
+            
+            # Skip the filler items for now; we add them dynamically below
+            if data.group in ["Event", "Trap", "Filler"]:
+                continue
+                
+            classification = get_item_classification(name, start_char)
+            item = self.create_item(name, classification)
+            self.multiworld.itempool.append(item)
+
+        # 2. Calculate how many empty locations we have left to fill
+        total_locations = len(self.multiworld.get_locations(self.player))
+        current_items = len(self.multiworld.itempool)
+        deficit = total_locations - current_items
+
+        # 3. Define our filler pools
+        traps = ["Doom", "Earthquake", "Russian Roulette"]
+        events = ["Points", "Small Tower", "Medium Tower", "Large Tower", 
+                  "Wheel Spin Small", "Wheel Spin Medium", "Wheel Spin Large",
+                  "Restock", "Tube Launchers", "Small Rain", "Medium Rain", "Large Rain", "UFO"]
+
+        trap_chance = self.options.trap_weight.value
+
+        # 4. Fill the remaining chests
+        for _ in range(deficit):
+            if self.multiworld.random.randint(1, 100) <= trap_chance:
+                filler_name = self.multiworld.random.choice(traps)
+            else:
+                filler_name = self.multiworld.random.choice(events)
+                
+            item = self.create_item(filler_name, ItemClassification.filler)
+            self.multiworld.itempool.append(item)
+
+    def create_item(self, name: str, classification: ItemClassification = None) -> Item:
+        """Helper to create an item with a specific classification."""
+        data = item_table[name]
+        # Use the dynamic classification passed from create_items, 
+        # or default to Useful if called elsewhere.
+        cls = classification if classification is not None else ItemClassification.useful
+        return Item(name, cls, data.code, self.player)
 
     def fill_slot_data(self):
+        # 1. Handle Milestone Scaling based on YAML Difficulty
+        difficulty = self.options.milestone_difficulty
+        # Easy = 0.5x, Normal = 1.0x, Hard = 2.0x
+        multiplier = 0.5 if difficulty == 0 else (2.0 if difficulty == 2 else 1.0)
+        
         default_milestones = [
             100000, 250000, 500000, 750000, 1000000, 1500000, 2000000, 2500000, 3000000, 4000000,
             5000000, 6000000, 7500000, 10000000, 15000000, 20000000, 25000000, 30000000, 40000000,
@@ -71,132 +95,27 @@ class RaccoinWorld(World):
         
         slot_data = {}
         for i, score in enumerate(default_milestones):
-            slot_data[f"milestone_{i+1}"] = score
+            # Scale the goals and send them to the C# mod
+            slot_data[f"milestone_{i+1}"] = int(score * multiplier)
             
-        slot_data["ap_points_value"] = 100
+        # 2. Send other YAML-defined values to the game
+        slot_data["ap_points_value"] = self.options.points_value.value
+        
+        # 3. Static helper values for game events
         slot_data["ap_small_tower_coins"] = 100
         slot_data["ap_medium_tower_coins"] = 250
         slot_data["ap_large_tower_coins"] = 500
-        
         slot_data["ap_wheel_spin_small"] = 3
         slot_data["ap_wheel_spin_medium"] = 4
         slot_data["ap_wheel_spin_large"] = 5
-        
         slot_data["ap_quake_shakes"] = 7
         slot_data["ap_restock_coins"] = 40
-        
         slot_data["ap_gift_rain_coins_small"] = 30
         slot_data["ap_gift_rain_coins_medium"] = 40
         slot_data["ap_gift_rain_coins_large"] = 50
-        
         slot_data["ap_tube_coins"] = 20
             
         return slot_data
 
-    def create_regions(self):
-        menu_region = Region("Menu", self.player, self.multiworld)
-        self.multiworld.regions.append(menu_region)
-
-        for loc_name, loc_id in self.location_name_to_id.items():
-            location = Location(self.player, loc_name, loc_id, menu_region)
-            menu_region.locations.append(location)
-
-    def create_items(self):
-        # 1. Define the characters
-        character_items = [
-            "Unlock Manager", "Unlock Biologist", "Unlock Chemist", 
-            "Unlock Trader", "Unlock Astronomer", "Unlock Big Eater"
-        ]
-        
-        # 2. Pick ONE random character to be the starter
-        starting_character = self.multiworld.random.choice(character_items)
-        
-        # 3. Give the starter to the player immediately!
-        self.multiworld.push_precollected(self.create_item(starting_character))
-
-        # 4. Add the remaining 5 characters to the pool
-        for char in character_items:
-            if char != starting_character:
-                self.multiworld.itempool.append(self.create_item(char))
-
-        # 5. Add the 123 Coins to the pool
-        for i in range(2001, 2124):
-            self.multiworld.itempool.append(self.create_item(f"Unlock Coin {i}"))
-
-        # 6. Fill the rest of the pool (Requires exactly 200 filler/traps to reach 328 total)
-        pool_distribution = {
-            "100 Points": 30,
-            "Small Coin Tower": 20,
-            "Medium Coin Tower": 10,
-            "Large Coin Tower": 5,
-            "Wheel Spin 3": 20,
-            "Wheel Spin 4": 10,
-            "Wheel Spin 5": 5,
-            "Small Gift Rain": 20,
-            "Medium Gift Rain": 10,
-            "Large Gift Rain": 5,
-            "Coin Restock": 10,
-            "Tube Launchers": 10,
-            "UFO": 10,
-            "Earthquake": 10,
-            "Doom Coin": 10,
-            "Russian Roulette": 15,
-        }
-
-        for item_name, count in pool_distribution.items():
-            for _ in range(count):
-                item = self.create_item(item_name)
-                self.multiworld.itempool.append(item)
-
-    def create_item(self, name: str) -> Item:
-        item_id = self.item_name_to_id[name]
-        
-        if name.startswith("Unlock Manager") or name.startswith("Unlock Biologist") or \
-           name.startswith("Unlock Chemist") or name.startswith("Unlock Trader") or \
-           name.startswith("Unlock Astronomer") or name.startswith("Unlock Big Eater"):
-            classification = ItemClassification.progression
-        elif name in ["Doom Coin", "Earthquake", "Russian Roulette"]:
-            classification = ItemClassification.trap
-        elif name in ["100 Points"]:
-            classification = ItemClassification.filler
-        else:
-            classification = ItemClassification.useful # Covers all the Coins!
-            
-        return Item(name, classification, item_id, self.player)
-
     def set_rules(self):
-        # ---------------------------------------------------------
-        # LOCATION LOCKS
-        # AP will safely ignore the rule for whichever character 
-        # it gave the player as a starter during create_items()
-        # ---------------------------------------------------------
-        
-        # Lock Manager Checks
-        for i in range(1, 51):
-            loc = self.multiworld.get_location(f"Manager Check {i}", self.player)
-            set_rule(loc, lambda state: state.has("Unlock Manager", self.player))
-
-        # Lock Biologist Checks
-        for i in range(1, 51):
-            loc = self.multiworld.get_location(f"Biologist Check {i}", self.player)
-            set_rule(loc, lambda state: state.has("Unlock Biologist", self.player))
-
-        # Lock Chemist Checks
-        for i in range(1, 51):
-            loc = self.multiworld.get_location(f"Chemist Check {i}", self.player)
-            set_rule(loc, lambda state: state.has("Unlock Chemist", self.player))
-
-        # Lock Trader Checks
-        for i in range(1, 51):
-            loc = self.multiworld.get_location(f"Trader Check {i}", self.player)
-            set_rule(loc, lambda state: state.has("Unlock Trader", self.player))
-
-        # Lock Astronomer Checks
-        for i in range(1, 51):
-            loc = self.multiworld.get_location(f"Astronomer Check {i}", self.player)
-            set_rule(loc, lambda state: state.has("Unlock Astronomer", self.player))
-
-        # Lock Big Eater Checks
-        for i in range(1, 51):
-            loc = self.multiworld.get_location(f"Big Eater Check {i}", self.player)
-            set_rule(loc, lambda state: state.has("Unlock Big Eater", self.player))
+        setup_rules(self)
