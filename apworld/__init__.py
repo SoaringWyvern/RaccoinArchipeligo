@@ -34,28 +34,76 @@ class RaccoinWorld(World):
 
     def create_items(self):
         start_char = self.starting_char_name
+        pool = []
+        starter_items = set()
 
-        # 1. Generate the core coins and characters
+        # 1. Handle Starter Pool Logic
+        if self.options.starter_pool:
+            core_pool = []
+            rarity_pools = {"Common": [], "Uncommon": [], "Rare": [], "Epic": []}
+            
+            # Grab the specific set of coins our starting character is allowed to use
+            usable_coins = CHARACTER_POOLS.get(start_char, set())
+            
+            for name, data in item_table.items():
+                if data.group not in ["Character", "Event", "Trap", "Filler"]:
+                    
+                    if name in usable_coins or data.group == "Core":
+                        
+                        if data.group == "Core":
+                            core_pool.append(name)
+                        if hasattr(data, 'rarity') and data.rarity in rarity_pools:
+                            rarity_pools[data.rarity].append(name)
+
+            # Pick Core Items first
+            self.multiworld.random.shuffle(core_pool)
+            for i in range(min(self.options.core_starters.value, len(core_pool))):
+                starter_items.add(core_pool[i])
+
+            # Pick Rarity Items (excluding ones already picked by Core)
+            counts = {
+                "Common": self.options.common_starters.value,
+                "Uncommon": self.options.uncommon_starters.value,
+                "Rare": self.options.rare_starters.value,
+                "Epic": self.options.epic_starters.value
+            }
+
+            for rarity, count in counts.items():
+                available = [n for n in rarity_pools[rarity] if n not in starter_items]
+                self.multiworld.random.shuffle(available)
+                for i in range(min(count, len(available))):
+                    starter_items.add(available[i])
+
+        # 2. Generate and Push Items
         for name, data in item_table.items():
-            if name == f"Unlock {start_char}":
-                starting_item = self.create_item(name, ItemClassification.progression)
-                self.multiworld.push_precollected(starting_item)
+            
+            # A: Precollect the starting character AND any chosen starter coins
+            if name == f"Unlock {start_char}" or name in starter_items:
+                # Unlocks are progression, starter coins are useful
+                cls = ItemClassification.progression if "Unlock" in name else ItemClassification.useful
+                item = self.create_item(name, cls)
+                self.multiworld.push_precollected(item)
                 continue
             
-            # Skip the filler items for now; we add them dynamically below
+            # B: Skip filler pools (we will calculate these at the end)
             if data.group in ["Event", "Trap", "Filler"]:
                 continue
                 
+            # C: If it's a character unlock that ISN'T our starter, we MUST add it to the pool!
+            if data.group == "Character":
+                if name != f"Unlock {start_char}":
+                    pool.append(self.create_item(name, ItemClassification.progression))
+                continue
+
+            # D: Everything else (the remaining coins)
             classification = get_item_classification(name, start_char)
-            item = self.create_item(name, classification)
-            self.multiworld.itempool.append(item)
+            pool.append(self.create_item(name, classification))
 
-        # 2. Calculate how many empty locations we have left to fill
+        # 3. Calculate deficit based on actual locations vs pool size
         total_locations = len(self.multiworld.get_locations(self.player))
-        current_items = len(self.multiworld.itempool)
-        deficit = total_locations - current_items
+        deficit = total_locations - len(pool)
 
-        # 3. Define our filler pools
+        # 4. Filler pools
         traps = ["Doom", "Earthquake", "Russian Roulette"]
         events = ["Points", "Small Tower", "Medium Tower", "Large Tower", 
                   "Wheel Spin Small", "Wheel Spin Medium", "Wheel Spin Large",
@@ -63,15 +111,17 @@ class RaccoinWorld(World):
 
         trap_chance = self.options.trap_weight.value
 
-        # 4. Fill the remaining chests
+        # 5. Fill the deficit
         for _ in range(deficit):
             if self.multiworld.random.randint(1, 100) <= trap_chance:
                 filler_name = self.multiworld.random.choice(traps)
             else:
                 filler_name = self.multiworld.random.choice(events)
-                
-            item = self.create_item(filler_name, ItemClassification.filler)
-            self.multiworld.itempool.append(item)
+            
+            pool.append(self.create_item(filler_name, ItemClassification.filler))
+
+        # 6. Push the entire completed pool to the multiworld
+        self.multiworld.itempool += pool
 
     def create_item(self, name: str, classification: ItemClassification = None) -> Item:
         """Helper to create an item with a specific classification."""

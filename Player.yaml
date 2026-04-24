@@ -4,7 +4,7 @@
 # Place this file in the 'Players' folder of your 
 # Archipelago installation before generating.
 
-name: YourPlayerName
+name: Player1
 game: raccoin
 
 raccoin:
@@ -37,6 +37,19 @@ raccoin:
   # every time you receive a '100 Points' item.
   # Range: 10 to 1000
   points_value: 100
+
+  # --- Starting Item Options ---
+  # Whether you start with some coins already in
+  # your inventory.
+  # setting starter_pool to 'false' will have you
+  # start with no coins until some are found
+
+  starter_pool: true
+  core_starters: 3
+  common_starters: 5
+  uncommon_starters: 3
+  rare_starters: 1
+  epic_starters: 0
 
 # ---------------------------------------------------------
 # End of RACCOIN Configuration

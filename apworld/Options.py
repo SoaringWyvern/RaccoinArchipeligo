@@ -40,9 +40,54 @@ class PointsValue(Range):
     range_end = 1000
     default = 100
 
+class StarterPool(DefaultOnToggle):
+    """If enabled, you will start with a random assortment of coins based on rarity."""
+    display_name = "Starter Pool"
+
+class CommonStarterCount(Range):
+    """Number of Common coins to start with."""
+    display_name = "Common Starter Count"
+    range_start = 0
+    range_end = 20
+    default = 5
+
+class UncommonStarterCount(Range):
+    """Number of Uncommon coins to start with."""
+    display_name = "Uncommon Starter Count"
+    range_start = 0
+    range_end = 15
+    default = 3
+
+class RareStarterCount(Range):
+    """Number of Rare coins to start with."""
+    display_name = "Rare Starter Count"
+    range_start = 0
+    range_end = 10
+    default = 1
+
+class EpicStarterCount(Range):
+    """Number of Epic coins to start with."""
+    display_name = "Epic Starter Count"
+    range_start = 0
+    range_end = 5
+    default = 0
+
+class CoreStarterCount(Range):
+    """Number of coins with the 'Core' tag to start with."""
+    display_name = "Core Starter Count"
+    range_start = 0
+    range_end = 20
+    default = 3
+
 @dataclass
 class RaccoinOptions(PerGameCommonOptions):
     starting_character: StartingCharacter
     milestone_difficulty: MilestoneDifficulty
     trap_weight: TrapWeight
     points_value: PointsValue
+    starter_pool: StarterPool
+    common_starters: CommonStarterCount
+    uncommon_starters: UncommonStarterCount
+    rare_starters: RareStarterCount
+    epic_starters: EpicStarterCount
+    core_starters: CoreStarterCount

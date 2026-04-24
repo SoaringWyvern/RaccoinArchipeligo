@@ -1,7 +1,6 @@
 from worlds.generic.Rules import set_rule
 
 def setup_rules(world):
-    # 1. Character Drop Checks
     character_logic = {
         "Manager": "Unlock Manager",
         "Biologist": "Unlock Biologist",
@@ -19,11 +18,11 @@ def setup_rules(world):
             loc = world.get_location(loc_name)
             
             if char_prefix == start_char:
-                continue 
+                loc.access_rule = lambda state: True
             else:
                 set_rule(loc, lambda state, item=req_item: state.has(item, world.player))
 
-    # 2. Score Milestone Scaling Logic
+    # Score Milestone Scaling Logic
     character_items = list(character_logic.values())
 
     for i in range(1, 29):
@@ -44,5 +43,15 @@ def setup_rules(world):
         else:
             req_count = 6
 
-        # The Rule: The player must have 'req_count' number of characters unlocked to logically access this milestone.
+        # The player must have 'req_count' number of characters unlocked to logically access this milestone.
         set_rule(loc, lambda state, count=req_count: sum(1 for char in character_items if state.has(char, world.player)) >= count)
+
+    # Win Condition
+    world.multiworld.completion_condition[world.player] = lambda state: state.has_all([
+        "Unlock Manager", 
+        "Unlock Biologist", 
+        "Unlock Chemist",
+        "Unlock Trader", 
+        "Unlock Astronomer", 
+        "Unlock Big Eater"
+    ], world.player)

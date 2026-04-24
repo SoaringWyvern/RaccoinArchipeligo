@@ -14,8 +14,11 @@ namespace RaccoinArchipelagoMod
         static int spawnCounter = 0; 
 
         [HarmonyPrefix]
-        public static void Prefix(ref int excelID)
+        public static bool Prefix(ref int excelID)
         {
+
+            // Only run if connected to an AP Server
+            if (!ArchipelagoManager.IsConnected) return true;
             spawnCounter++;
             
             // Every 5th prize ball requested by the game becomes an AP Ball
@@ -28,6 +31,7 @@ namespace RaccoinArchipelagoMod
                 excelID = 80000; 
                 RaccoinPlugin.ModLogger.LogInfo($"[AP] Intercepted chute! Changed normal ball {oldID} to AP Check (ID 4005)!");
             }
+            return true;
         }
     }
 
@@ -456,6 +460,9 @@ namespace RaccoinArchipelagoMod
         [HarmonyPostfix]
         public static void Postfix(MilestoneStageView __instance)
         {
+
+            if (!ArchipelagoManager.IsConnected) return;
+
             try
             {
                 if (RaccoinPlugin.APLogoSprite == null)
@@ -854,6 +861,30 @@ namespace RaccoinArchipelagoMod
             catch { }
 
             return true;
+        }
+    }
+
+    // THE VICTORY TRIGGER
+    [HarmonyPatch(typeof(RoundEndUIController), nameof(RoundEndUIController.Goal))] 
+    public class Round15VictoryPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(RoundEndUIController __instance)
+        {
+            
+            // Only run if connected to an AP Server
+            if (!ArchipelagoManager.IsConnected) return;
+
+            // Ask the game if this is the final round
+            bool isFinal = __instance.IsFinalRound();
+            
+            // Log exactly what the game tells us!
+            RaccoinPlugin.ModLogger.LogMessage($"[AP DEBUG] RoundEndUIController.Goal fired! IsFinalRound: {isFinal}");
+
+            if (isFinal)
+            {
+                ArchipelagoManager.RegisterRound15Victory();
+            }
         }
     }
 

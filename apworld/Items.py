@@ -5,6 +5,7 @@ from BaseClasses import ItemClassification
 class RaccoinItemData(NamedTuple):
     code: int
     group: str
+    rarity: str
 
 BASE_ID = 80000
 
@@ -87,22 +88,16 @@ CHARACTER_POOLS = {
 }
 
 def get_item_classification(name: str, start_char: str) -> ItemClassification:
+    # Character Unlocks are the ONLY items that should be Progression
     if "Unlock" in name:
         return ItemClassification.progression
-
-    # Count how many characters have access to this coin
-    total_character_count = sum(1 for pool in CHARACTER_POOLS.values() if name in pool)
-    is_in_my_pool = name in CHARACTER_POOLS.get(start_char, set())
-
-    # Progression: Exclusive to my current character (Rare/Specialist)
-    if is_in_my_pool and total_character_count <= 2:
-        return ItemClassification.progression
     
-    # Useful: Specialist for others or high-utility overlaps
-    if total_character_count <= 2:
+    # Everything else is just a power-up. 
+    # Marking them 'useful' or 'filler' prevents circular logic errors.
+    item_data = item_table.get(name)
+    if item_data and item_data.rarity in ["Epic", "Rare"]:
         return ItemClassification.useful
         
-    # Filler: Core coins shared by 3 or more characters
     return ItemClassification.filler
 
 # ITEM GENERATION
@@ -112,205 +107,148 @@ def get_item_table() -> Dict[str, RaccoinItemData]:
     Generates the master item_table with verified IDs from the collection dump.
     Groups are categorized by their 'Exclusivity' or 'Type'.
     """
-    # Mapping: Name -> (GameID, Group)
+    # Mapping: Name -> (GameID, Group, Rarity)
     raw_data = {
-        # 1000 Series (Base Metals)
-        "Copper Coin": (1001, "Metal"),
-        "Silver Coin": (1002, "Metal"),
-        "Gold Coin": (1003, "Metal"),
-
-        # 2000 Series (Standard & Specialty Coins)
-        "Glue Coin": (2001, "Core"),
-        "Bomboin": (2002, "Core"),
-        "Tickoin": (2003, "Core"),
-        "Chummy Coin": (2004, "Manager"),
-        "Seedoin": (2005, "Biologist"),
-        "Wateroin": (2006, "Shared"),
-        "Bunny Coin": (2007, "Core"),
-        "Relicoin": (2008, "Core"),
-        "Eggoin": (2009, "Big Eater"),
-        "Cooinkie": (2010, "Common"),
-        "Chococoin": (2011, "Core"),
-        "Radiation Coin": (2012, "Core"),
-        "Hen Coin": (2013, "Biologist"),
-        "Boost Coin": (2014, "Core"),
-        "Atomicoin": (2015, "Core"),
-        "Multicoin": (2016, "Core"),
-        "Square Coin": (2017, "Manager"),
-        "JawBreakoin": (2018, "Core"),
-        "Fried Chickoin": (2019, "Common"),
-        "Magnetoin": (2020, "Core"),
-        "Sensoroin": (2021, "Core"),
-        "Wolfoin": (2022, "Biologist"),
-        "Star Coin": (2023, "Core"),
-        "Giraffe Coin": (2024, "Core"),
-        "Bananoin": (2025, "Common"),
-        "Monkey Coin": (2026, "Biologist"),
-        "Moon Coin": (2027, "Astronomer"),
-        "Sun Coin": (2028, "Astronomer"),
-        "Primal Coin": (2029, "Trader"),
-        "Jetoin": (2030, "Trader"),
-        "Roulette Coin": (2031, "Core"),
-        "Lightning Coin": (2032, "Core"),
-        "Battery Coin": (2033, "Chemist"),
-        "Ally Coin": (2034, "Manager"),
-        "Corncoin": (2035, "Biologist"),
-        "Popcorn": (2036, "Common"),
-        "Fireball Coin": (2037, "Chemist"),
-        "Bubble Coin": (2038, "Chemist"),
-        "Bubble Gum Coin": (2039, "Core"),
-        "Equal Coin": (2040, "Manager"),
-        "Stomachoin": (2041, "Biologist"),
-        "Ratoin": (2042, "Shared"),
-        "Tigeroin": (2043, "Biologist"),
-        "Mushroin": (2044, "Big Eater"),
-        "Whirlwind Coin": (2045, "Core"),
-        "Poocoin": (2046, "Common"),
-        "Saw Coin": (2047, "Core"),
-        "Wish Pool Coin": (2048, "Core"),
-        "Division Coin": (2049, "Core"),
-        "Wormhole Coin": (2050, "Core"),
-        "Creditoin": (2051, "Core"),
-        "Fishoin": (2052, "Shared"),
-        "Catoin": (2053, "Biologist"),
-        "Pigeoin": (2054, "Biologist"),
-        "Bullish Coin": (2055, "Core"),
-        "Rocketoin": (2056, "Core"),
-        "Luckcoin": (2057, "Trader"),
-        "Frogoin": (2058, "Biologist"),
-        "Lotusoin": (2059, "Biologist"),
-        "Drumoin": (2060, "Trader"),
-        "Frozen Coin": (2061, "Core"),
-        "Sumoin": (2062, "Manager"),
-        "Speakeroin": (2063, "Core"),
-        "1/2 Coin": (2064, "Manager"),
-        "Greater Coin": (2065, "Core"),
-        "Foxoin": (2066, "Biologist"),
-        "Cloveroin": (2067, "Core"),
-        "Workoin": (2068, "Manager"),
-        "Killer Coin": (2069, "Core"),
-        "TNT Coin": (2070, "Chemist"),
-        "Earthquakoin": (2071, "Core"),
-        "Snowman Coin": (2072, "Chemist"),
-        "Palette Coin": (2073, "Chemist"),
-        "Hypnoticoin": (2074, "Trader"),
-        "Magicoin": (2075, "Trader"),
-        "Blind Boxoin": (2076, "Trader"),
-        "Dice Coin": (2077, "Trader"),
-        "Richoin": (2078, "Core"),
-        "+1 Coin": (2079, "Core"),
-        "Slime Coin": (2080, "Trader"),
-        "Emoin": (2081, "Trader"),
-        "Minion Coin": (2082, "Trader"),
-        "Red Packet Coin": (2083, "Core"),
-        "Factorial Coin": (2084, "Manager"),
-        "Percentoin": (2085, "Manager"),
-        "Rooster Coin": (2086, "Biologist"),
-        "Dogoin": (2087, "Core"),
-        "Chomp Coin": (2088, "Biologist"),
-        "Bean Coin": (2089, "Common"),
-        "Pinwheel Coin": (2090, "Chemist"),
-        "Bait Coin": (2091, "Core"),
-        "Souloin": (2092, "Trader"),
-        "Raw Ore Coin": (2093, "Chemist"),
-        "Sandoin": (2094, "Common"),
-        "Quartzoin": (2095, "Common"),
-        "Amethystoin": (2096, "Common"),
-        "Diamondoin": (2097, "Common"),
-        "Comboin": (2098, "Trader"),
-        "Coinrona": (2099, "Common"),
-        "Coinmet": (2100, "Astronomer"),
-        "Meteoroin": (2101, "Astronomer"),
-        "Aeroliteoin": (2102, "Astronomer"),
-        "Mercury Coin": (2103, "Astronomer"),
-        "Venusoin": (2104, "Astronomer"),
-        "Earthoin": (2105, "Astronomer"),
-        "Marsoin": (2106, "Core"),
-        "Jupiteroin": (2107, "Astronomer"),
-        "Saturoin": (2108, "Astronomer"),
-        "Uranusoin": (2109, "Astronomer"),
-        "Neptuoin": (2110, "Astronomer"),
-        "Dr. Balloin": (2111, "Common"),
-        "Coin Alien": (2112, "Common"),
-        "Cheateroin": (2113, "Core"),
-        "Riceoin": (2114, "Big Eater"),
-        "Doughoin": (2115, "Big Eater"),
-        "Greenoin": (2116, "Big Eater"),
-        "Fridgeoin": (2117, "Big Eater"),
-        "Burnt Foodoin": (2118, "Common"),
-        "Clayoin": (2119, "Common"),
-        "Colored Glazeoin": (2120, "Common"),
-        "Budoin": (2121, "Biologist"),
-        "Collapsoin": (2122, "Core"),
-        "Jokeroin": (2123, "Trader"),
-
-        # 3000 Series (Rotten/Tired Variants)
-        "Tired Bunny Coin": (3007, "Variant"),
-        "Rotten Chococoin": (3011, "Variant"),
-        "Rotten Bananoin": (3025, "Variant"),
-        "Rotten Corncoin": (3035, "Variant"),
-        "Salted Fishoin": (3052, "Variant"),
-
-        # 5000 Series (Food/Dish Coins)
-        "Rice Balloin": (5001, "Food"),
-        "Sushioin": (5002, "Food"),
-        "Omuriceoin": (5003, "Food"),
-        "Mushroin Rice": (5004, "Food"),
-        "Rice Pudding": (5005, "Food"),
-        "Seven-Herb Porridge": (5006, "Food"),
-        "Oyakodoin": (5051, "Food"),
-        "Beggar's Chicken Riceoin": (5052, "Food"),
-        "Veggie Burgeroin": (5101, "Food"),
-        "Chikuwaoin": (5102, "Food"),
-        "Egg Puffsoin": (5103, "Food"),
-        "Mushroin Pizza": (5104, "Food"),
-        "Swiss Rolloin": (5105, "Food"),
-        "Clover Fritteroin": (5106, "Food"),
-        "Fish Burgeroin": (5151, "Food"),
-        "Sour Fish Soupoin": (5202, "Food"),
-        "Tanghuluoin": (5205, "Food"),
-        "Saladoin": (5206, "Food"),
-        "Beggar's Chickeoin": (5207, "Food"),
+        "Glue Coin": (2001, "Core", "Common"),
+        "Bomboin": (2002, "Core", "Rare"),
+        "Tickoin": (2003, "Core", "Common"),
+        "Chummy Coin": (2004, "Manager", "Common"),
+        "Seedoin": (2005, "Biologist", "Rare"),
+        "Wateroin": (2006, "Shared", "Common"),
+        "Bunny Coin": (2007, "Core", "Common"),
+        "Relicoin": (2008, "Core", "Common"),
+        "Eggoin": (2009, "Big Eater", "Common"),
+        "Chococoin": (2011, "Core", "Uncommon"),
+        "Radiation Coin": (2012, "Core", "Uncommon"),
+        "Hen Coin": (2013, "Biologist", "Uncommon"),
+        "Boost Coin": (2014, "Core", "Uncommon"),
+        "Atomicoin": (2015, "Core", "Rare"),
+        "Multicoin": (2016, "Core", "Rare"),
+        "Square Coin": (2017, "Manager", "Rare"),
+        "JawBreakoin": (2018, "Core", "Uncommon"),
+        "Magnetoin": (2020, "Core", "Uncommon"),
+        "Sensoroin": (2021, "Core", "Uncommon"),
+        "Wolfoin": (2022, "Biologist", "Uncommon"),
+        "Star Coin": (2023, "Core", "Uncommon"),
+        "Giraffe Coin": (2024, "Core", "Rare"),
+        "Monkey Coin": (2026, "Biologist", "Uncommon"),
+        "Moon Coin": (2027, "Astronomer", "Rare"),
+        "Sun Coin": (2028, "Astronomer", "Epic"),
+        "Primal Coin": (2029, "Trader", "Uncommon"),
+        "Jetoin": (2030, "Trader", "Uncommon"),
+        "Roulette Coin": (2031, "Core", "Rare"),
+        "Lightning Coin": (2032, "Core", "Uncommon"),
+        "Battery Coin": (2033, "Chemist", "Epic"),
+        "Ally Coin": (2034, "Manager", "Uncommon"),
+        "Corncoin": (2035, "Biologist", "Epic"),
+        "Fireball Coin": (2037, "Chemist", "Epic"),
+        "Bubble Coin": (2038, "Chemist", "Uncommon"),
+        "Bubble Gum Coin": (2039, "Core", "Uncommon"),
+        "Equal Coin": (2040, "Manager", "Rare"),
+        "Stomachoin": (2041, "Biologist", "Rare"),
+        "Ratoin": (2042, "Shared", "Uncommon"),
+        "Tigeroin": (2043, "Biologist", "Epic"),
+        "Mushroin": (2044, "Big Eater", "Uncommon"),
+        "Whirlwind Coin": (2045, "Core", "Rare"),
+        "Saw Coin": (2047, "Core", "Rare"),
+        "Wish Pool Coin": (2048, "Core", "Epic"),
+        "Division Coin": (2049, "Core", "Epic"),
+        "Wormhole Coin": (2050, "Core", "Epic"),
+        "Creditoin": (2051, "Core", "Uncommon"),
+        "Fishoin": (2052, "Shared", "Uncommon"),
+        "Catoin": (2053, "Biologist", "Uncommon"),
+        "Pigeoin": (2054, "Biologist", "Rare"),
+        "Bullish Coin": (2055, "Core", "Rare"),
+        "Rocketoin": (2056, "Core", "Rare"),
+        "Luckcoin": (2057, "Trader", "Epic"),
+        "Frogoin": (2058, "Biologist", "Rare"),
+        "Lotusoin": (2059, "Biologist", "Common"),
+        "Drumoin": (2060, "Trader", "Epic"),
+        "Frozen Coin": (2061, "Core", "Uncommon"),
+        "Sumoin": (2062, "Manager", "Epic"),
+        "Speakeroin": (2063, "Core", "Rare"),
+        "1/2 Coin": (2064, "Manager", "Epic"),
+        "Greater Coin": (2065, "Core", "Rare"),
+        "Foxoin": (2066, "Biologist", "Epic"),
+        "Cloveroin": (2067, "Core", "Common"),
+        "Workoin": (2068, "Manager", "Uncommon"),
+        "Killer Coin": (2069, "Core", "Epic"),
+        "TNT Coin": (2070, "Chemist", "Uncommon"),
+        "Earthquakoin": (2071, "Core", "Uncommon"),
+        "Snowman Coin": (2072, "Chemist", "Rare"),
+        "Palette Coin": (2073, "Chemist", "Rare"),
+        "Hypnoticoin": (2074, "Trader", "Uncommon"),
+        "Magicoin": (2075, "Trader", "Uncommon"),
+        "Blind Boxoin": (2076, "Trader", "Uncommon"),
+        "Dice Coin": (2077, "Trader", "Uncommon"),
+        "Richoin": (2078, "Core", "Rare"),
+        "+1 Coin": (2079, "Core", "Common"),
+        "Slime Coin": (2080, "Trader", "Rare"),
+        "Emoin": (2081, "Trader", "Rare"),
+        "Minion Coin": (2082, "Trader", "Common"),
+        "Red Packet Coin": (2083, "Core", "Uncommon"),
+        "Factorial Coin": (2084, "Manager", "Epic"),
+        "Percentoin": (2085, "Manager", "Uncommon"),
+        "Rooster Coin": (2086, "Biologist", "Rare"),
+        "Dogoin": (2087, "Core", "Epic"),
+        "Chomp Coin": (2088, "Biologist", "Rare"),
+        "Pinwheel Coin": (2090, "Chemist", "Epic"),
+        "Bait Coin": (2091, "Core", "Uncommon"),
+        "Souloin": (2092, "Trader", "Epic"),
+        "Raw Ore Coin": (2093, "Chemist", "Uncommon"),
+        "Comboin": (2098, "Trader", "Rare"),
+        "Coinmet": (2100, "Astronomer", "Rare"),
+        "Meteoroin": (2101, "Astronomer", "Uncommon"),
+        "Aeroliteoin": (2102, "Astronomer", "Common"),
+        "Mercury Coin": (2103, "Astronomer", "Common"),
+        "Venusoin": (2104, "Astronomer", "Uncommon"),
+        "Earthoin": (2105, "Astronomer", "Rare"),
+        "Marsoin": (2106, "Core", "Common"),
+        "Jupiteroin": (2107, "Astronomer", "Uncommon"),
+        "Saturoin": (2108, "Astronomer", "Epic"),
+        "Uranusoin": (2109, "Astronomer", "Rare"),
+        "Neptuoin": (2110, "Astronomer", "Epic"),
+        "Cheateroin": (2113, "Core", "Epic"),
+        "Riceoin": (2114, "Big Eater", "Common"),
+        "Doughoin": (2115, "Big Eater", "Uncommon"),
+        "Greenoin": (2116, "Big Eater", "Rare"),
+        "Fridgeoin": (2117, "Big Eater", "Rare"),
+        "Budoin": (2121, "Biologist", "Uncommon"),
+        "Collapsoin": (2122, "Core", "Epic"),
+        "Jokeroin": (2123, "Trader", "Epic"),
     }
     
     table = {}
-    for name, (game_id, group) in raw_data.items():
-        # AP ID calculation logic
-        if 1000 <= game_id < 2000:
-            ap_id = 81000 + (game_id % 1000)
-        elif 2000 <= game_id < 3000:
+    for name, (game_id, group, rarity) in raw_data.items():
+        if 2000 <= game_id < 3000:
             ap_id = 82000 + (game_id % 2000)
-        elif 3000 <= game_id < 4000:
-            ap_id = 83000 + (game_id % 3000)
-        elif 5000 <= game_id < 6000:
-            ap_id = 85000 + (game_id % 5000)
         else:
-            ap_id = BASE_ID + game_id
+            ap_id = 80000 + game_id
             
-        table[name] = RaccoinItemData(ap_id, group)
+        table[name] = RaccoinItemData(ap_id, group, rarity)
         
-    table["Unlock Manager"]   = RaccoinItemData(BASE_ID + 900, "Character")
-    table["Unlock Biologist"] = RaccoinItemData(BASE_ID + 901, "Character")
-    table["Unlock Chemist"]   = RaccoinItemData(BASE_ID + 902, "Character")
-    table["Unlock Trader"]    = RaccoinItemData(BASE_ID + 903, "Character")
-    table["Unlock Astronomer"] = RaccoinItemData(BASE_ID + 904, "Character")
-    table["Unlock Big Eater"]  = RaccoinItemData(BASE_ID + 905, "Character")
-    table["Points"] = RaccoinItemData(80002, "Filler")
-    table["Small Tower"] = RaccoinItemData(80003, "Event")
-    table["Wheel Spin Small"] = RaccoinItemData(80004, "Event")
-    table["Doom"] = RaccoinItemData(80005, "Trap")
-    table["Earthquake"] = RaccoinItemData(80006, "Trap")
-    table["Restock"] = RaccoinItemData(80007, "Event")
-    table["Russian Roulette"] = RaccoinItemData(80008, "Trap")
-    table["Tube Launchers"] = RaccoinItemData(80009, "Event")
-    table["Small Rain"] = RaccoinItemData(80010, "Event")
-    table["UFO"] = RaccoinItemData(80011, "Event")
-    table["Medium Tower"] = RaccoinItemData(80012, "Event")
-    table["Large Tower"] = RaccoinItemData(80013, "Event")
-    table["Wheel Spin Medium"] = RaccoinItemData(80014, "Event")
-    table["Wheel Spin Large"] = RaccoinItemData(80015, "Event")
-    table["Medium Rain"] = RaccoinItemData(80016, "Event")
-    table["Large Rain"] = RaccoinItemData(80017, "Event")
+    table["Unlock Manager"]   = RaccoinItemData(BASE_ID + 900, "Character", "None")
+    table["Unlock Biologist"] = RaccoinItemData(BASE_ID + 901, "Character", "None")
+    table["Unlock Chemist"]   = RaccoinItemData(BASE_ID + 902, "Character", "None")
+    table["Unlock Trader"]    = RaccoinItemData(BASE_ID + 903, "Character", "None")
+    table["Unlock Astronomer"] = RaccoinItemData(BASE_ID + 904, "Character", "None")
+    table["Unlock Big Eater"]  = RaccoinItemData(BASE_ID + 905, "Character", "None")
+    table["Points"] = RaccoinItemData(80002, "Filler", "None")
+    table["Small Tower"] = RaccoinItemData(80003, "Event", "None")
+    table["Wheel Spin Small"] = RaccoinItemData(80004, "Event", "None")
+    table["Doom"] = RaccoinItemData(80005, "Trap", "None")
+    table["Earthquake"] = RaccoinItemData(80006, "Trap", "None")
+    table["Restock"] = RaccoinItemData(80007, "Event", "None")
+    table["Russian Roulette"] = RaccoinItemData(80008, "Trap", "None")
+    table["Tube Launchers"] = RaccoinItemData(80009, "Event", "None")
+    table["Small Rain"] = RaccoinItemData(80010, "Event", "None")
+    table["UFO"] = RaccoinItemData(80011, "Event", "None")
+    table["Medium Tower"] = RaccoinItemData(80012, "Event", "None")
+    table["Large Tower"] = RaccoinItemData(80013, "Event", "None")
+    table["Wheel Spin Medium"] = RaccoinItemData(80014, "Event", "None")
+    table["Wheel Spin Large"] = RaccoinItemData(80015, "Event", "None")
+    table["Medium Rain"] = RaccoinItemData(80016, "Event", "None")
+    table["Large Rain"] = RaccoinItemData(80017, "Event", "None")
     
     return table
 

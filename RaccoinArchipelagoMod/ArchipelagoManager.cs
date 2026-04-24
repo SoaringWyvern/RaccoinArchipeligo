@@ -6,6 +6,7 @@ using Archipelago.MultiClient.Net.Enums;
 using Archipelago.MultiClient.Net.Models;
 using Archipelago.MultiClient.Net.Helpers;
 using UnityEngine;
+using System.Linq;
 
 namespace RaccoinArchipelagoMod
 {
@@ -74,8 +75,14 @@ namespace RaccoinArchipelagoMod
             {
                 long apId = 0;
                 if (i >= 1000 && i < 2000)      apId = 81000 + (i % 1000);
+
+                // Coin IDs
                 else if (i >= 2000 && i < 3000) apId = 82000 + (i % 2000);
+
+                // Reserved for Chip IDs (TO DO)
                 else if (i >= 3000 && i < 4000) apId = 83000 + (i % 3000);
+
+                //Reserved for Card IDs (TO DO)
                 else if (i >= 5000 && i < 6000) apId = 85000 + (i % 5000);
 
                 if (apId != 0) CoinIdMapping[i] = apId;
@@ -117,27 +124,41 @@ namespace RaccoinArchipelagoMod
                     RaccoinPlugin.Instance.Config.Save();
                 }
 
+                // Sync Slot Data for Event Params
+                if (loginSuccess.SlotData.TryGetValue("ap_points_value", out var pv)) AP_PointsValue = Convert.ToInt32(pv);
+                if (loginSuccess.SlotData.TryGetValue("ap_restock_coins", out var rcv)) AP_RestockCoins = Convert.ToInt32(rcv);
+
+                // Run sync BEFORE iterating items to get the correct ProcessedItemIndex
+                SyncOnConnect();
+                SyncVictories();
+
                 // Inventory Initialization
                 InitializeCoinMapping();
                 UnlockedCharacters.Clear();
                 UnlockedItems.Clear();
 
-                foreach (var itemInfo in Session.Items.AllItemsReceived)
+                for (int i = 0; i < Session.Items.AllItemsReceived.Count; i++)
                 {
-                    long itemId = itemInfo.Item;
-                    // Match character unlock range from Items.py (80901-80905)
+                    long itemId = Session.Items.AllItemsReceived[i].Item;
+                    
+                    // 1. Reconstruct the passive inventory for the UI
                     if (itemId >= 80900 && itemId <= 80905) UnlockedCharacters.Add(itemId);
                     else if (itemId >= 81000 && itemId <= 86000) UnlockedItems.Add(itemId);
+
+                    // 2. If the item is NEW (like starter items on a fresh seed), queue it
+                    if (i >= ProcessedItemIndex)
+                    {
+                        ItemQueue.Enqueue(itemId);
+                        ProcessedItemIndex = i + 1;
+
+                        string currentPlayer = Session.Players.GetPlayerName(Session.ConnectionInfo.Slot);
+                        File.WriteAllText($"AP_Save_{currentPlayer}_{currentSeed}.txt", ProcessedItemIndex.ToString());
+                    }
                 }
 
                 Session.MessageLog.OnMessageReceived += OnMessageReceived;
                 Session.Items.ItemReceived += OnItemReceived;
 
-                // Sync Slot Data for Event Params
-                if (loginSuccess.SlotData.TryGetValue("ap_points_value", out var pv)) AP_PointsValue = Convert.ToInt32(pv);
-                if (loginSuccess.SlotData.TryGetValue("ap_restock_coins", out var rcv)) AP_RestockCoins = Convert.ToInt32(rcv);
-
-                SyncOnConnect();
                 ScoutMilestoneLocations();
                 RaccoinPlugin.Instance.PatchMilestoneRequirements();
                 
@@ -172,6 +193,65 @@ namespace RaccoinArchipelagoMod
                 string currentSeed = Session.RoomState.Seed;
                 string saveFilePath = $"AP_Save_{currentPlayer}_{currentSeed}.txt";
                 File.WriteAllText(saveFilePath, ProcessedItemIndex.ToString());
+            }
+        }
+
+        // Tracks which characters have beaten Round 15
+        public static HashSet<int> CompletedCharacters = new HashSet<int>();
+
+        // Call this inside your existing SyncOnConnect() method!
+        public static void SyncVictories()
+        {
+            if (Session == null || !IsConnected) return;
+            string saveFilePath = $"AP_Victories_{Session.Players.GetPlayerName(Session.ConnectionInfo.Slot)}_{Session.RoomState.Seed}.txt";
+            if (File.Exists(saveFilePath))
+            {
+                string[] savedChars = File.ReadAllLines(saveFilePath);
+                foreach (string charId in savedChars)
+                {
+                    if (int.TryParse(charId, out int id)) CompletedCharacters.Add(id);
+                }
+            }
+        }
+
+        // The method that processes a win
+        public static void RegisterRound15Victory()
+        {
+            RaccoinPlugin.ModLogger.LogMessage($"[AP DEBUG] RegisterRound15Victory triggered for Character ID {ActiveCharacterID}!");
+
+            if (!IsConnected)
+            {
+                RaccoinPlugin.ModLogger.LogMessage("[AP DEBUG] Aborting Victory save - Not connected to Archipelago server.");
+                return;
+            }
+
+            // If this character hasn't been logged as a winner yet...
+            if (!CompletedCharacters.Contains(ActiveCharacterID))
+            {
+                CompletedCharacters.Add(ActiveCharacterID);
+
+                // Save locally to a text file so it persists
+                string saveFilePath = $"AP_Victories_{Session.Players.GetPlayerName(Session.ConnectionInfo.Slot)}_{Session.RoomState.Seed}.txt";
+                File.WriteAllLines(saveFilePath, System.Linq.Enumerable.Select(CompletedCharacters, c => c.ToString()).ToArray());
+
+                RaccoinPlugin.ModLogger.LogMessage($"[AP] Character {ActiveCharacterID} cleared Round 15! ({CompletedCharacters.Count}/6 Completed)");
+
+                // Did we just cross the final finish line?
+                if (CompletedCharacters.Count >= 6)
+                {
+                    // Send the official Archipelago "Goal Achieved" packet
+                    var statusUpdatePacket = new Archipelago.MultiClient.Net.Packets.StatusUpdatePacket();
+                    statusUpdatePacket.Status = ArchipelagoClientState.ClientGoal;
+                    Session.Socket.SendPacket(statusUpdatePacket);
+
+                    RaccoinPlugin.ModLogger.LogMessage($"=========================================");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] VICTORY! All 6 characters have cleared Round 15!");
+                    RaccoinPlugin.ModLogger.LogMessage($"=========================================");
+                }
+            }
+            else
+            {
+                RaccoinPlugin.ModLogger.LogMessage($"[AP DEBUG] Character {ActiveCharacterID} has already logged a victory previously. Ignoring.");
             }
         }
 
