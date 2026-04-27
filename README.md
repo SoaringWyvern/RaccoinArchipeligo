@@ -1,7 +1,7 @@
 # RaccoinArchipeligo
 
 
-Welcome to the official Archipelago Multiworld randomizer mod for RACCOIN. This mod connects your game to the Archipelago server, shuffling your character unlocks, coins, and events with other players in a randomized multiworld experience.
+Welcome to the Archipelago Multiworld randomizer mod for RACCOIN. This mod connects your game to the Archipelago server, shuffling your character unlocks, coins, and events with other players in a randomized multiworld experience.
 
 Installation Instructions
 (Note: You must have BepInEx installed for RACCOIN before using this mod. BepInEx 6.0.0-be.755 (IL2CPP version) is recommended)
