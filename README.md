@@ -1,6 +1,6 @@
 # RaccoinArchipeligo
 
-Raccoin Archipelago Mod
+
 Welcome to the official Archipelago Multiworld randomizer mod for RACCOIN. This mod connects your game to the Archipelago server, shuffling your character unlocks, coins, and events with other players in a randomized multiworld experience.
 
 Installation Instructions
