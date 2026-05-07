@@ -44,8 +44,8 @@ namespace RaccoinArchipelagoMod
 
         public static void ProcessCatch()
         {
-            // DEBOUNCE: If both AddPrize and RemovePrizeBall fire within 0.1 seconds of each other, 
-            // ignore the duplicate trigger to prevent double-sending!
+            // If both AddPrize and RemovePrizeBall fire within 0.1 seconds of each other, 
+            // ignore the duplicate trigger to prevent double-sending
             if (Time.unscaledTime - lastCatchTime < 0.1f) return;
             
             lastCatchTime = Time.unscaledTime;
@@ -111,7 +111,6 @@ namespace RaccoinArchipelagoMod
             {
                 APCatcher.ProcessCatch();
                 
-                // CRITICAL FIX: ALWAYS return true here!
                 // If this returns false, the physical 3D ball never gets destroyed by the engine and permanently clogs the board.
                 return true; 
             }
@@ -377,81 +376,6 @@ namespace RaccoinArchipelagoMod
             return false; 
         }
     }
-
-    // // TEMPORARY DEV TOOOL: EVENT WIRETAP
-    // // Posts events to the console and displays the values that were passed to them.
-    // [HarmonyPatch(typeof(EventQueueManager), nameof(EventQueueManager.AddQueueEvent))]
-    // public class ExpandedEventWiretapPatch
-    // {
-    //     [HarmonyPrefix]
-    //     public static void Prefix(QueueEvent queueEvent)
-    //     {
-    //         // Filter out the system events to keep the console clean
-    //         if (queueEvent.eventType != QueueEventDefine.Save && 
-    //             queueEvent.eventType != QueueEventDefine.WaitRoundEnd &&
-    //             queueEvent.eventType != QueueEventDefine.RoundEnd &&
-    //             queueEvent.eventType != QueueEventDefine.None &&
-    //             queueEvent.eventType != QueueEventDefine.EnumEnd)
-    //         {
-    //             RaccoinPlugin.ModLogger.LogWarning($"=====================================");
-    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] CAUGHT EVENT: {queueEvent.eventType}");
-    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] infoID_0: {queueEvent.infoID_0}");
-    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] infoID_1: {queueEvent.infoID_1}");
-    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] infoID_2: {queueEvent.infoID_2}");
-    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] info string: {queueEvent.info}");
-    //             RaccoinPlugin.ModLogger.LogWarning($"[SPY] checkBool: {queueEvent.checkBool}");
-    //             RaccoinPlugin.ModLogger.LogWarning($"=====================================");
-    //         }
-    //     }
-    // }
-
-    // // TEMPORARY DEV TOOL: EVENT TESTER
-    // // F8: Fire Event & Increment ID | F9: Force Clear Stuck Event
-    // [HarmonyPatch(typeof(CoinMachineController), nameof(CoinMachineController.Update))]
-    // public class EventMapperDevToolPatch
-    // {
-    //     // Change these two variables to test different events and starting IDs.
-    //     public static QueueEventDefine CurrentTestEvent = QueueEventDefine.CoinTower;
-    //     public static int CurrentTestID = 100; 
-
-    //     [HarmonyPostfix]
-    //     public static void Postfix()
-    //     {
-    //         // F8: FIRE THE EVENT
-    //         if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F8))
-    //         {
-    //             EventQueueManager eventManager = UnityEngine.Object.FindObjectOfType<EventQueueManager>();
-    //             if (eventManager != null)
-    //             {
-    //                 QueueEvent slip = new QueueEvent(CurrentTestEvent, CurrentTestID, 1, 1, "", false);
-    //                 eventManager.AddQueueEvent(slip);
-                    
-    //                 RaccoinPlugin.ModLogger.LogMessage("=========================================");
-    //                 RaccoinPlugin.ModLogger.LogMessage($"[DEV TOOL] Fired {CurrentTestEvent} with ID: {CurrentTestID}");
-    //                 RaccoinPlugin.ModLogger.LogMessage("=========================================");
-                    
-    //                 CurrentTestID++;
-    //             }
-    //         }
-
-    //         // F9: CLEAR EVENT QUEUE
-    //         if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F9))
-    //         {
-    //             EventQueueManager eventManager = UnityEngine.Object.FindObjectOfType<EventQueueManager>();
-    //             if (eventManager != null)
-    //             {
-    //                 RaccoinPlugin.ModLogger.LogWarning($"[DEV TOOL] Attempting to force-clear stuck {CurrentTestEvent}...");
-                    
-    //                 // Force the game to think the current event finished naturally
-    //                 eventManager.EndQueueEvent_Deal(CurrentTestEvent);
-                
-    //                 eventManager.ClearInQueueEvent(CurrentTestEvent);
-                    
-    //                 RaccoinPlugin.ModLogger.LogWarning($"[DEV TOOL] Queue cleared! Safe to press F8 again.");
-    //             }
-    //         }
-    //     }
-    // }
 
     // MILESTONE TRACKER VISUAL HIJACK
     [HarmonyPatch(typeof(MilestoneStageView), "SetRewardView")]
@@ -760,56 +684,6 @@ namespace RaccoinArchipelagoMod
             return true;
         }
     }
-
-    // // TEMPORARY DEV TOOL: TOOLTIP DATA VIEWER
-    // // Used for grabbing coin IDs and names by hovering over them in the Collections screen
-    // [HarmonyPatch(typeof(CollectionUIView), nameof(CollectionUIView.ShowInfo))]
-    // public class AutoCodexTooltipDumper
-    // {
-    //     [HarmonyPostfix]
-    //     public static void Postfix(CollectionUIView __instance)
-    //     {
-    //         try
-    //         {
-    //             // 1. Grab the ID from the instance (just like your reference used __instance)
-    //             int gameId = __instance.id;
-    //             if (gameId <= 0) return;
-
-    //             // 2. Grab the name from the slot's text component
-    //             string coinName = "Unknown";
-    //             if (__instance.nameText != null)
-    //             {
-    //                 coinName = __instance.nameText.text.Trim();
-    //             }
-
-    //             // 3. Category Logic
-    //             long apId = 0;
-    //             if (gameId >= 1000 && gameId < 2000)      apId = 81000 + (gameId % 1000);
-    //             else if (gameId >= 2000 && gameId < 3000) apId = 82000 + (gameId % 2000);
-    //             else if (gameId >= 3000 && gameId < 4000) apId = 83000 + (gameId % 3000);
-    //             else if (gameId >= 5000 && gameId < 6000) apId = 85000 + (gameId % 5000);
-
-    //             // 4. Log it
-    //             string dumpPath = System.IO.Path.Combine(BepInEx.Paths.PluginPath, "Python_Final_Mapping.txt");
-    //             using (System.IO.StreamWriter writer = new System.IO.StreamWriter(dumpPath, true))
-    //             {
-    //                 writer.WriteLine($"{coinName} | {gameId} | {apId}");
-    //             }
-
-    //             RaccoinPlugin.ModLogger.LogWarning($"[AP SPY] Logged: {coinName} (ID: {gameId})");
-    //         }
-    //         catch (Exception e)
-    //         {
-    //             RaccoinPlugin.ModLogger.LogError($"[AP SPY] Hook failed: {e.Message}");
-    //         }
-    //     }
-    // }
-
-    // --- UNIVERSAL COIN LOGGER ---
-    // Targets any coin slot (Codex or Character Select) that uses CollectionUIView
-
-    // --- CHARACTER SCREEN COIN LOGGER (REFINED) ---
-    // --- CHARACTER SCREEN COIN LOGGER (WITH NAMES) ---
     
     // LOCK THE COIN POOL
     [HarmonyPatch(typeof(GameplayData), nameof(GameplayData.RefreshDrawPool))]
