@@ -79,6 +79,31 @@ class CoreStarterCount(Range):
     range_end = 20
     default = 3
 
+class APBallMode(Choice):
+    """
+    How should AP prize balls spawn?
+    Counter: Spawns exactly every N prize balls.
+    Percentage: Has a % chance to replace any regular prize ball.
+    """
+    display_name = "AP Ball Spawn Mode"
+    option_counter = 0
+    option_percentage = 1
+    default = 0
+
+class APBallCount(Range):
+    """If using Counter mode, every Nth prize ball will be an AP ball."""
+    display_name = "AP Ball Spawn Count"
+    range_start = 1
+    range_end = 50
+    default = 5
+
+class APBallChance(Range):
+    """If using Percentage mode, the % chance any prize ball becomes an AP ball."""
+    display_name = "AP Ball Spawn Chance"
+    range_start = 1
+    range_end = 100
+    default = 20
+
 @dataclass
 class RaccoinOptions(PerGameCommonOptions):
     starting_character: StartingCharacter
@@ -91,3 +116,6 @@ class RaccoinOptions(PerGameCommonOptions):
     rare_starters: RareStarterCount
     epic_starters: EpicStarterCount
     core_starters: CoreStarterCount
+    ap_ball_mode: APBallMode
+    ap_ball_count: APBallCount
+    ap_ball_chance: APBallChance

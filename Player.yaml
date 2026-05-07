@@ -43,13 +43,26 @@ raccoin:
   # your inventory.
   # setting starter_pool to 'false' will have you
   # start with no coins until some are found
-
   starter_pool: true
   core_starters: 3
   common_starters: 5
   uncommon_starters: 3
   rare_starters: 1
   epic_starters: 0
+
+  # --- AP Ball Spawns ---
+  # How should Archipelago prize balls spawn on the board?
+  # 'counter': Spawns exactly every N prize balls.
+  # 'percentage': Every prize ball has a % chance to be an AP ball.
+  ap_ball_mode: counter
+
+  # If using 'counter' mode, every Nth prize ball will be an AP ball.
+  # Range: 1 to 50
+  ap_ball_count: 5
+
+  # If using 'percentage' mode, the % chance any prize ball becomes an AP ball.
+  # Range: 1 to 100
+  ap_ball_chance: 20
 
 # ---------------------------------------------------------
 # End of RACCOIN Configuration

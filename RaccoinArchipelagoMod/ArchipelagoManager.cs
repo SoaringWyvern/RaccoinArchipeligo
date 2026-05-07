@@ -29,6 +29,10 @@ namespace RaccoinArchipelagoMod
         public static int AP_EarthquakeShakes = 7;
         public static int AP_RestockCoins = 40;
         public static int AP_TubeLauncherCoins = 20;
+        public static int AP_BallMode = 0; // 0 = Counter, 1 = Percentage
+        public static int AP_BallCount = 5;
+        public static int AP_BallChance = 20;
+        public static int SessionPrizeBallsSpawned = 0; // Used to track the counter mode
 
         // Inventory Tracking
         public static HashSet<long> UnlockedItems = new HashSet<long>();
@@ -127,6 +131,10 @@ namespace RaccoinArchipelagoMod
                 // Sync Slot Data for Event Params
                 if (loginSuccess.SlotData.TryGetValue("ap_points_value", out var pv)) AP_PointsValue = Convert.ToInt32(pv);
                 if (loginSuccess.SlotData.TryGetValue("ap_restock_coins", out var rcv)) AP_RestockCoins = Convert.ToInt32(rcv);
+                if (loginSuccess.SlotData.TryGetValue("ap_ball_mode", out var bm)) AP_BallMode = Convert.ToInt32(bm);
+                if (loginSuccess.SlotData.TryGetValue("ap_ball_count", out var bc)) AP_BallCount = Convert.ToInt32(bc);
+                if (loginSuccess.SlotData.TryGetValue("ap_ball_chance", out var bch)) AP_BallChance = Convert.ToInt32(bch);
+                SessionPrizeBallsSpawned = 0; // Reset counter on connect
 
                 // Run sync BEFORE iterating items to get the correct ProcessedItemIndex
                 SyncOnConnect();
@@ -199,7 +207,6 @@ namespace RaccoinArchipelagoMod
         // Tracks which characters have beaten Round 15
         public static HashSet<int> CompletedCharacters = new HashSet<int>();
 
-        // Call this inside your existing SyncOnConnect() method!
         public static void SyncVictories()
         {
             if (Session == null || !IsConnected) return;
@@ -245,7 +252,7 @@ namespace RaccoinArchipelagoMod
                     Session.Socket.SendPacket(statusUpdatePacket);
 
                     RaccoinPlugin.ModLogger.LogMessage($"=========================================");
-                    RaccoinPlugin.ModLogger.LogMessage($"[AP] VICTORY! All 6 characters have cleared Round 15!");
+                    RaccoinPlugin.ModLogger.LogMessage($"[AP] VICTORY! All characters have cleared Round 15!");
                     RaccoinPlugin.ModLogger.LogMessage($"=========================================");
                 }
             }
@@ -317,5 +324,29 @@ namespace RaccoinArchipelagoMod
             if (File.Exists(saveFilePath) && int.TryParse(File.ReadAllText(saveFilePath), out int savedIndex))
                 ProcessedItemIndex = savedIndex;
         }
+
+        public static bool ShouldSpawnAPBall()
+        {
+            // Mode 0: Counter (Every Nth ball)
+            if (AP_BallMode == 0)
+            {
+                SessionPrizeBallsSpawned++;
+                if (SessionPrizeBallsSpawned >= AP_BallCount)
+                {
+                    SessionPrizeBallsSpawned = 0; // Reset the tracker
+                    return true;
+                }
+                return false;
+            }
+            // Mode 1: Percentage Chance
+            else 
+            {
+                // Roll 1 to 100
+                int roll = UnityEngine.Random.Range(1, 101);
+                return roll <= AP_BallChance;
+            }
+        }
     }
+
+    
 }

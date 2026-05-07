@@ -164,6 +164,9 @@ class RaccoinWorld(World):
         slot_data["ap_gift_rain_coins_medium"] = 40
         slot_data["ap_gift_rain_coins_large"] = 50
         slot_data["ap_tube_coins"] = 20
+        slot_data["ap_ball_mode"] = self.options.ap_ball_mode.value
+        slot_data["ap_ball_count"] = self.options.ap_ball_count.value
+        slot_data["ap_ball_chance"] = self.options.ap_ball_chance.value
             
         return slot_data
 

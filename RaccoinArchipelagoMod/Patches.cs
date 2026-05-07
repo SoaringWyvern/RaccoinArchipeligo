@@ -11,26 +11,24 @@ namespace RaccoinArchipelagoMod
     [HarmonyPatch(typeof(GameplayData), nameof(GameplayData.AddPrizeBall))]
     public class SpawnPrizeBallPatch
     {
-        static int spawnCounter = 0; 
-
         [HarmonyPrefix]
         public static bool Prefix(ref int excelID)
         {
-
             // Only run if connected to an AP Server
             if (!ArchipelagoManager.IsConnected) return true;
-            spawnCounter++;
-            
-            // Every 5th prize ball requested by the game becomes an AP Ball
-            if (spawnCounter >= 5)
+
+            // Call our new helper method that checks the YAML mode (Counter or Percentage)
+            if (ArchipelagoManager.ShouldSpawnAPBall())
             {
-                spawnCounter = 0;
                 int oldID = excelID;
                 
-                // Hijack the request and tell the chute to drop ID 4005 instead
+                // Hijack the request and tell the chute to drop the AP Ball instead
                 excelID = 80000; 
-                RaccoinPlugin.ModLogger.LogInfo($"[AP] Intercepted chute! Changed normal ball {oldID} to AP Check (ID 4005)!");
+                RaccoinPlugin.ModLogger.LogInfo($"[AP] Intercepted chute! Changed normal ball {oldID} to AP Check (ID 80000)!");
             }
+            
+            // Return true so the game continues running AddPrizeBall. 
+            // If ShouldSpawnAPBall was true, it uses 80000. If false, it uses the vanilla ID.
             return true;
         }
     }
